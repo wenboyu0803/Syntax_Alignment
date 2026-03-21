@@ -95,10 +95,7 @@ df01 <- merge(df01, pingfen, by = "Rate_ID")
 jgpingfen <- df01 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Rating.mean, 
   词类, Trials, PPVTZ) |>
-  dplyr::filter(词类 == "结果动补", 
-                #Syntax_prime == "zh", 
-                #Syntax_production == "zh"
-                )
+  dplyr::filter(词类 == "结果动补")
 qxpingfen <- df01 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Rating.mean, 
   词类, Trials, PPVTZ) |>
