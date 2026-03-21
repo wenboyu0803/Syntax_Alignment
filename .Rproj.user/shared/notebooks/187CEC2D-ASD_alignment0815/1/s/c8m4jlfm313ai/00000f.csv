@@ -1,0 +1,21 @@
+"0","dfqx3 <- df02 |>"
+"0","  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC, 词类) |>"
+"0","  dplyr::filter(词类 == ""趋向动补"", Syntax_prime == ""be"") |>"
+"0","  count(Syntax_production, Group) |>"
+"0","  dplyr::mutate(Syntax_prime = rep(""be"", 6)) |>"
+"0","  rename(freq = n)"
+"0",""
+"0","dfjg3 <- df02 |>"
+"0","  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC, 词类) |>"
+"0","  dplyr::filter(词类 != ""趋向动补"", Syntax_prime == ""zh"") |>"
+"0","  count(Syntax_production, Group) |>"
+"0","  dplyr::mutate(Syntax_prime = rep(""be"", 4)) |>"
+"0","  rename(freq = n)"
+"1","[1m[33mError[39m in `dplyr::mutate()`:[22m
+[38;5;232m[36mℹ[38;5;232m In argument: `Syntax_prime = rep(""be"", 4)`.[39m
+[1mCaused by error:[22m
+[38;5;232m[33m![38;5;232m `Syntax_prime` must be size 5 or 1, not 4.[39m
+Backtrace:
+[90m 1. [39m[1mdplyr[22m::rename(...)
+[90m 9. [39mdplyr:::dplyr_internal_error(...)
+"

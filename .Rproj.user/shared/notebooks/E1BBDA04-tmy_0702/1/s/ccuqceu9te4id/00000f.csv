@@ -1,0 +1,41 @@
+"0","if (!requireNamespace(""pacman"", quietly = TRUE)) {"
+"0","  install.packages(""pacman"") }"
+"0","pacman::p_load(""dplyr"", ""tidyverse"", ""ggplot2"", ""patchwork"", ""papaja"", ""afex"", ""emmeans"",""bruceR"", ""performance"", ""lavaan"", ""lavaanPlot"",""leaps"", ""gghalves"")"
+"2","试开URL’https://mirrors.tuna.tsinghua.edu.cn/CRAN/bin/windows/contrib/4.5/visNetwork_2.1.4.zip'
+"
+"2","试开URL’https://mirrors.tuna.tsinghua.edu.cn/CRAN/bin/windows/contrib/4.5/DiagrammeR_1.0.11.zip'
+"
+"2","试开URL’https://mirrors.tuna.tsinghua.edu.cn/CRAN/bin/windows/contrib/4.5/lavaanPlot_0.8.1.zip'
+"
+"1","程序包‘visNetwork’打开成功，MD5和检查也通过
+"
+"1","程序包‘DiagrammeR’打开成功，MD5和检查也通过
+"
+"1","程序包‘lavaanPlot’打开成功，MD5和检查也通过
+"
+"1","
+"
+"1",""
+"1","下载的二进制程序包在
+	C:\Users\yuwen\AppData\Local\Temp\Rtmpgl5qtS\downloaded_packages里"
+"1",""
+"1","
+"
+"2","试开URL’https://mirrors.tuna.tsinghua.edu.cn/CRAN/bin/windows/contrib/4.5/leaps_3.2.zip'
+"
+"2","Content type 'application/zip'"
+"2"," length 88818 bytes (86 KB)
+"
+"2","downloaded 86 KB
+
+"
+"1","程序包‘leaps’打开成功，MD5和检查也通过
+"
+"1","
+"
+"1",""
+"1","下载的二进制程序包在
+	C:\Users\yuwen\AppData\Local\Temp\Rtmpgl5qtS\downloaded_packages里"
+"1",""
+"1","
+"

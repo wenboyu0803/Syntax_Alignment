@@ -1,0 +1,885 @@
+---
+title: "lecture_07 数据整理1"
+author: "Wenboyu"
+date: "2025-10-20"
+output: html_document
+---
+
+```{r lecture 06 作业1}
+#作业1：在mtcars使用循环print出第三列~第七列中和这两行的数据：Valiant,Merc 230
+#提示，当变量名字里面有空格的时候，可以采用`变量名`的形式调取变量
+mtcars #查看数据
+#(1)输出函数是什么
+#(2)写出第一个循环的格式
+#(3)写出第二个循环的格式
+#(4)遍历的范围如何确定
+#(5)完善
+
+#方法1
+hangnames <- c("Valiant", "Merc 230")
+lienames <- c(names(mtcars[,3:7]))
+for (i in hangnames){
+  for (u in lienames){
+    print(mtcars[i, u])
+  }
+}
+
+
+#方法2
+a <- c(which(rownames(mtcars) == c("Valiant")), 
+       which(rownames(mtcars) == c("Merc 230")))
+#找到行名是这两个的位置，也就是索引值
+b <- c(3:7)
+for (m in a){
+  for (n in b){
+    print(mtcars[m, n])
+  }
+}
+```
+
+
+```{r lecture 06 作业2.0}
+#作业2：建立一个数据框（三列，六行），三列分别为年级（大一、大二和大三、大四），性别（男、女），专业（至少两个），然后通过if语句生成一个新的列（成绩），要求大一+男=优秀，大二+女=优秀，大二+男=良好，其他为及格。
+#思路：
+#建立数据框（把每一列建立好，然后组成）
+#同时满足两个条件使用&，用[]获取元素
+#判断后的等级需要存储在一个向量或者列表里面，根据位置摆放
+#创建一个空list
+#把等级list和原始的数据框进行合并
+nianji <- c(paste0("大", c("一", "二", "三","三")))
+xingbie <- c("nan","nan","nv","nv")
+zhuanye <- c("math","english","literature","math")
+df <- data.frame(nianji, xingbie, zhuanye)
+df
+```
+
+```{r lecture 06 作业2.1}
+#方法1:for 循环
+dengji <- list() #创建一个空的列表
+for (i in c(1 : nrow(df))){ #写出循环
+  if (df$nianji[i] == "大一" & df$xingbie[i] == "nan"){  #满足两个条件同时成立
+    dengji[[i]] <- "优秀"  #对列表中的对应元素位置进行赋值
+    } else if (df$nianji[i] == "大二" & df$xingbie[i] == "nv"){
+    dengji[[i]] <- "优秀"
+    }else if (df$nianji[i] == "大二" & df$xingbie[i] == "nan"){
+    dengji[[i]] <- "良好"
+    } else{ 
+      dengji[[i]] <- "及格"}        #对其他所有情况都进行复制
+}
+df.new <- cbind(df, data.frame(unlist(dengji))) #拼接
+df.new
+
+```
+
+```{r lecture 06 作业2.2}
+#方法2：自定义函数
+dengjipanduan <- function(x){
+  dengji <- list() #创建一个空的列表
+  for (i in c(1 : nrow(df))){ #写出循环
+  if (df$nianji[i] == "大一" & df$xingbie[i] == "nan"){  #满足两个条件同时成立
+    dengji[[i]] <- "优秀"  #对列表中的对应元素位置进行赋值
+    } else if (df$nianji[i] == "大二" & df$xingbie[i] == "nv"){
+    dengji[[i]] <- "优秀"
+    }else if (df$nianji[i] == "大二" & df$xingbie[i] == "nan"){
+    dengji[[i]] <- "良好"
+    } else{ 
+      dengji[[i]] <- "及格"}        #对其他所有情况都进行赋值
+  }
+  return(dengji)
+}
+dengjipanduan(df)
+```
+
+```{r lecture 06 作业2.3}
+#方法3：purrr
+i <- 1
+dj <- purrr::map2(df$nianji, df$xingbie, 
+                  function(x, y){
+                    z = list()
+                    if (x == "大一" & y == "nan"){
+                      z[[i]] = "优秀"
+                      }
+                    else if(x == "大二" & y == "nv"){
+                      z[[i]] = "良好"
+                      }
+                    else if(x == "大二" & y == "nan"){
+                      z[[i]] = "良好"
+                      }
+                    else {
+                      z[[i]] = "及格"
+                      i = i +1
+                      }
+                    return(z)
+                    }
+                  )
+unlist(dj)
+```
+
+```{r lecture 06 作业2.4}
+##方法4:大语言模型告诉我们更加精确的写法
+de.fun <- function(x, y){
+  if (x == "大一" & y == "nan"){
+  return("优秀")}
+else if(x == "大二" & y == "nv"){
+  return("良好")}
+else if(x == "大二" & y == "nan"){
+  return("良好")}
+else {
+  return("及格")}
+}
+purrr::map2_chr(df[,1], df[,2], de.fun)
+#map函数会自动将每一对变量推进函数中，所以不需要i,所以只需要返回等级就可以了
+#返回的等级是字符串，所以直接转换成字符串
+```
+
+
+```{r lecture 06 作业3}
+#作业3：编写一个函数，用来计算一个数值向量的集中趋势（均值和标准差）或者离散趋势（中位数和绝对中位数），默认计算均值和标准差，但也可以通过修改参数，让函数计算中位数和绝对中位数。计算的结果用下划线连接、并且输出。
+#思路
+##先把自定义函数的框架写好
+zuoye.fun <- function(x, leibie = c("center", "spread")) {
+  
+}
+
+##计算集中趋势的函数
+#sd(x);mean(x)
+##计算离散趋势的函数
+#median(x);mad(x)
+
+##输出结果
+#jieguo <- paste(sd(x), mean(x), "_")
+#jieguo <- paste(median(x), mad(x), "_")
+#return(jieguo)
+
+##使用if结构进行控制
+# if (leibie == "center"){
+#   jieguo <- paste(sd(x), mean(x), "_")
+#   jieguo <- paste("集中趋势结果是：", jieguo)
+# } else{
+#   jieguo <- paste(sd(x), mean(x), "_")
+#   jieguo <- paste("离散趋势结果是：", jieguo)
+# }
+
+##整合到一起
+zuoye.fun <- function(x, leibie = c("center", "spread")) {
+  if (leibie == "center") {
+    jieguo <- paste(sd(x),  mean(x), "_")
+    jieguo <- paste("集中趋势结果是：", jieguo)
+  } else{
+    jieguo <- paste(sd(x), mean(x), "_")
+    jieguo <- paste("离散趋势结果是：", jieguo)
+  }
+  return(jieguo)
+}
+#zuoye.fun(c(3,5))
+##微调
+
+
+jisuanfun = function(x, type = "center"){
+  if (type == "center"){
+    a <- sd(x)
+    b <- mean(x)
+    d <- paste(a, b, sep = "_")
+    res = paste("集中趋势结果是:", d)
+}else{
+    m <- median(x)
+    n <- mad(x)
+    l <- paste(m, n, sep = "_")
+    res = paste("离散趋势结果是:", l)
+  }
+  return(res)
+}
+
+
+##大模型的答案
+jisuanFUN <- function(x, center = TRUE, spread = TRUE) {
+  x <- x[!is.na(x)]
+  res <- list()
+  if (center)
+    res$center <- c(mean = mean(x), median = median(x))
+  if (spread)
+    res$spread <- c(
+      sd = sd(x),
+      mad = mad(x),
+      var = var(x),
+      range = max(x) - min(x)
+    )
+  return(res)
+}
+
+jisuanFUN(c(3,2))
+```
+
+```{r 杨思恩答案}
+calculate_stats <- function(x, type = "central") {
+  if(!is.numeric(x)) {
+    stop("输入必须为数值向量")
+  }
+  if(type == "central") {
+    mean_val <- mean(x, na.rm = TRUE)
+    sd_val <- sd(x, na.rm = TRUE)
+    result <- paste(round(mean_val, 2), round(sd_val, 2), sep = "_")
+    cat("集中趋势（均值_标准差）:", result, "\n")
+    
+  } else if(type == "dispersion") {
+    median_val <- median(x, na.rm = TRUE)
+    mad_val <- mad(x, na.rm = TRUE)  
+    result <- paste(round(median_val, 2), round(mad_val, 2), sep = "_")
+    cat("离散趋势（中位数_绝对中位差）:", result, "\n")
+    
+  } else {
+    stop("type参数必须是'central'或'dispersion'")
+  }
+  return(result)
+}
+
+#calculate_stats(c(1,2))
+#?type应该写在哪里？
+calculate_stats(c(1,2), type = "central")
+calculate_stats(c(1,2), type = "dispersion")
+#calculate_stats(c(1,2), type = "d")
+calculate_stats(data.frame(1,2), type = "central")
+```
+
+
+
+一 数据清洗
+（一）定义
+数据清洗指的是对原始数据进行筛选、剔除、选择、转换和插补等步骤，以达到进行统计分析和作图的过程。
+数据清洗直接影响到实验结果。
+```{r}
+level1 <- c(round(rnorm(10, 10, 4), 3))
+level2 <- c(round(rnorm(9, 10, 4), 3), 100)
+level2
+cat("水平1的平均值是", mean(level1), "\n")
+cat("水平2的平均值是", mean(level2), "\n")
+```
+
+（二）数据清洗的原则
+1. 公开和可重复性
+```{r}
+knitr::include_graphics('./picture/shujuqingli1.png')
+```
+
+2. 数据清理的规范性和自由度
+(1)反应时数据是否只要正确的、最短最长反应时设置多少、极端数据如何界定
+(2)产出数据如何转录
+```{r}
+knitr::include_graphics('./picture/shujuqingli2.png')
+```
+(3)是否有多人校对
+
+3. 结果稳定性
+是否在一定的自由度下，都可以得到相同或者相似的结果。
+```{r}
+level1 <- c(round(rnorm(10, 10, 4), 3))
+level2 <- c(round(rnorm(9, 10, 4), 3), 100)
+level2
+cat("水平2的三个标准差极端标准", mean(level2)+3*sd(level2), "\n")
+cat("水平2的2.5个标准差极端标准", mean(level2)+2.5*sd(level2), "\n")
+```
+
+
+二 心理语言学数据清理的目标
+（一）真实的数据
+1. 研究目标
+例如“阿姨”在整个词里面，阿和姨分别只构成了一个词，这个词是一样的。所以阿只出现了一次，只有词头没有词尾；姨也是只出现了一次，只有词尾没有词头。所以两个的词素位置概率都是1。很多文献只对母语者进行考察，大多显示词首在词汇识别中作用更大，但也有文献表明词首不起作用。我想从语素位置进行这一角度考察二语组在词汇识别中是否具有语素认知加工的能力，进一步看一下如果有这种能力的话，究竟是词首起作用还是词尾起作用？和母语者有何不同
+2. 实验任务
+被试要对所有词进行真词判断反应，40个真词，40个假词，数据分析统计真词，因变量是反应时间
+3. 实验材料和设计
+3（被试：高水平二语者、中水平二语者、母语）*
+2（词首词素位置概率：高、低）*
+2（词尾词素位置概率：高、低）
+```{r}
+rio::import("./real_data/data_information/data_infor.xlsx", sheet = "material")
+```
+
+
+（二）清洗的目标
+目标指的就是数据最后的形式，即要进入统计分析之前的数据形式。
+```{r 数据最终应该的样子}
+df.0 <- bruceR::import("./real_data/mubiao/final.xlsx")
+df.0
+```
+
+
+三 心理语言学数据清理步骤
+（一）tidyverse包
+tidyverse：是hadley wickham及团队的集大成之作，是专门为数据科学而开发的一系列包的集合。tidyverse包基于整洁数据，提供了一致的提层设计哲学、语法和数据结构
+tidyverse包的核心包：
+```{r tidyverse核心包}
+knitr::include_graphics('./picture/hexinbao.png')
+```
+
+tidyverse用现代、优雅的方式，以管道式、泛函式编程技术实现了数据科学的整个流程：
+（1）导入数据
+（2）数据清洗（数据清理和整理）
+（3）数据可视化
+（4）数据建模
+（5）可重现与交互报告
+```{r tidyverse工作流程}
+knitr::include_graphics('./picture/gongzuoliu.png')
+library(tidyverse)
+library(bruceR)
+```
+
+
+（二）导入数据
+data information：被试信息、变量信息（可能没有用、也不需要）
+raw data:原始数据用csv格式存储
+raw excel：原始数据用excel格式存储
+raw forei：外国人数据用csv格式存储
+raw native：中国人数据用csv格式存储
+CSV是psychopy默认的数据格式，eprime的数据可以粘贴成excel、csv和txt文件
+
+（三）认识数据（略）
+（四）明确统计模型（略）
+（五）数据整理
+
+1. 导入数据的函数
+import(
+  file,(需要包括扩展名)
+  encoding = NULL,
+  header = "auto",  #自动识别表头，会将两个表格相同的表头合并
+  sheet = NULL,
+  range = NULL,
+  pkg = c("haven", "foreign"),
+  value.labels = FALSE,
+  as = "data.frame",
+  verbose = FALSE
+)
+
+2. 读入一个数据
+```{r 读入被试、变量信息}
+sub.in <- rio::import(
+  paste0("./real_data/data_information/", "data_infor.xlsx"),
+  #文件名是全路径
+  sheet = "subject"
+)
+sub.in
+
+#sub.infor <- bruceR::import("data_infor.xlsx", sheet = "subject") #如果文件就在rmd文件夹一层，就只可以直接读入，不需要路径
+
+material <- bruceR::import(
+  paste0("./real_data/data_information/", "data_infor.xlsx"),
+  #文件名是全路径
+  sheet = "material",
+  encoding = "UTF-8"
+)
+#大家自行不使用paste0函数读取材料信息
+sub <- rio::import(file = "./real_data/data_information/data_infor.xlsx")
+```
+
+
+3. 循环读入数据（小视频）
+```{r 循环读入文件}
+#使用readxl::read_xlsx函数读取excel文件,配合for循环
+#以前是如何读入数据的？为什么要循环读入数据？思路是什么？我们在对成绩等级进行判断的时候怎么做的？
+#(1)获取要读取的文件名
+#(2)读取一个文件，写出函数
+#(3)把读取一个文件的函数写入循环
+#(4)每次读取的文件和之前的合并
+
+native.name <- list.files("./real_data/raw_excel")#获取文件夹下所有数据名称
+
+native.raw <- list() #创建一个空的list
+
+for (i in native.name) {
+  
+  a <- readxl::read_xlsx(paste0("./real_data/raw_excel/", i))
+  
+  native.raw <- rbind(native.raw, a)
+  
+}
+
+######体会和上节课写循环的区别（使用索引）#########
+```
+
+csv_files <- list.files(
+  #获取所有文件名
+  path = "./lecture_03_0815/New_folder/vsl2",
+  pattern = "\\.csv$",
+  full.names = TRUE    #####此处特别关键
+)     
+
+data_list <- list()
+for (i in seq_along(csv_files)) {
+  data_list[[i]] <- rio::import(csv_files[i]) %>%
+    dplyr::select(participant,
+                  key_resp.keys,
+                  key_resp.corr,
+                  corrAns,
+                  paste0("image", 2:7)) %>%
+    dplyr::filter(!is.na(key_resp.corr))         #不要corr是空值的，即不要学习阶段的数据
+}
+df1 <- bind_rows(data_list)        #把列表合并起来
+```{r 练习使用全名称读取数据}
+
+```
+
+
+```{r 泛函式编程}
+#使用map函数，教材66页
+files = fs::dir_ls("./real_data/raw_excel")
+df <- purrr::map_dfr(files, readxl::read_xlsx) #自动拼接成一个数据框
+View(df)
+```
+
+
+4. 读取txt数据
+```{r 读取txt文件}
+#使用import读入txt文件，需要设置分割符和header
+a0 <- read.table("./real_data/data_information/data_infor.txt",
+                 header = TRUE,
+                 sep = "\t")
+a1 <- read.table("./real_data/data_information/data_infor.txt")
+a2 <- read.table("./real_data/data_information/data_infor.txt", header = TRUE)
+a1
+a2
+#a1和a2有什么区别，体会header的作用
+```
+
+
+5. 具体操作
+```{r 读入实验数据}
+#读取数据的目的是：读入数据，合并到一个数据框
+raw.name <- list.files("./real_data/raw_data")#获取文件夹下所有数据名称
+raw.df <- list() #创建一个空的list
+for (i in raw.name){
+  raw.df <- rbind(raw.df, 
+                  bruceR::import(paste0("./real_data/raw_data/", i)))
+}
+#为什么会出错？
+```
+
+
+```{r 分两组读入数据}
+#读取外国人数据
+forei.name <- list.files("./real_data/raw_forei")#获取文件夹下所有数据名称
+forei.raw <- list() #创建一个空的list
+for (i in forei.name){
+  forei.raw <- rbind(forei.raw, 
+                     bruceR::import(paste0("./real_data/raw_forei/", i)))
+}
+ncol(forei.raw) #检查数据
+
+
+#读取中国人数据
+native.name <- list.files("./real_data/raw_native")#获取文件夹下所有数据名称
+native.raw <- list() #创建一个空的list
+for (i in native.name){
+  native.raw <- rbind(native.raw,
+                      bruceR::import(paste0("./real_data/raw_native/", i)))
+}
+ncol(native.raw) #检查数据
+```
+
+
+```{r 找到原始数据差在哪里}
+n <- list()
+a = 1
+for (i in names(forei.raw)){
+  if (i %in% names(native.raw) == "FALSE"){
+    n[[a]] <- i
+    a = a + 1
+  }
+}
+unlist(n)#这些列名在外国人表格里面，但是不在中国人表格里面
+
+m <- list()
+a = 1
+for (i in names(native.raw)){
+  if (i %in% names(forei.raw) == "FALSE"){
+    m[[a]] <- i
+    a = a + 1
+  }
+}
+unlist(m)#这些列名在中国人表格里面，但是不在外国人表格里面
+```
+
+大量收数据之前要特别注意：
+A: 关键指标有没有问题：sti_key_resp.corr	sti_key_resp.rt
+B: 是不是有没有反应的情况？
+C: 没有反应的话，是不是要一直持续，还是跳过；没有反应代表什么？
+和反应错了一样吗？
+D: 如果没有反应，在数据上怎么体现？NA？0？还是空白？还是……
+
+
+既然已经找到了没有批量读入的原因，那么怎么办呢？
+
+（四）数据整理
+常用的变量名就是编号、性别、姓名、年龄、试次名、变量名、被试反应、反应时间和答案等
+1. 选择变量
+```{r 通过select函数来选择需要的列}
+#native 数据
+names(native.raw) #查看列名
+#确定要哪些列
+lieming <- c("sti_key_resp.corr", "sti_key_resp.rt", "target_text",  "性别", "participant")
+nr.1 <- dplyr::select(native.raw, lieming)
+nr.2 <- dplyr::select(native.raw, all_of(lieming))
+nr.2
+```
+
+select(data = , lieming(不需要引号的列名和索引))
+
+select(data = , -列名和索引)
+
+select(data =, start_with(), ends_with(), where(), ...)
+
+```{r 通过select函数来选择需要的列}
+#不选择lieming向量中的列
+nr.2 <- dplyr::select(native.raw, -all_of(lieming))
+nr.2 <- dplyr::select(native.raw, starts_with("trials")) #以正则表达来选择列
+nr.2 <- dplyr::select(native.raw, 4) #以索引的方式来选择列
+nr.1 <- dplyr::select(native.raw, all_of(lieming)) #重新运行原来的代码
+```
+
+2. 过滤试次
+```{r 通过filter函数来选择需要的行1}
+#我们不选择练习试次、不选择实验信息行
+nr.2 <- dplyr::filter(nr.1, !is.na(target_text))
+nr.2
+is.na(nr.1$target_text[1]) #看似NA的是NA吗？
+nr.2 <- dplyr::filter(nr.1, target_text != "")
+nr.2
+```
+
+
+```{r 通过filter函数来选择需要的行2}
+#直接选择判断是正确或者错误的行
+nr.2 <- dplyr::filter(nr.1, 
+                      sti_key_resp.corr == 1 |
+                      sti_key_resp.corr == 0)
+```
+
+
+```{r 练习：计算错误的比例}
+#由于只分析正确反应，所以反应错误的也不要
+nr.3 <- dplyr::filter(nr.2, 
+                      sti_key_resp.corr == 1)
+#View(nr.3)
+```
+
+filter(starwars, hair_color == "none" & eye_color == "black") 交集
+filter(starwars, hair_color == "none" | eye_color == "black") 或者
+
+
+3. 变量转换
+```{r 通过rename函数来修改列名}
+rename(nr.3, panduan = sti_key_resp.corr,  #没有赋值就没有保存
+             RT = sti_key_resp.rt,
+             stimulus = target_text,
+             sex = "性别",
+             subject = participant)
+head(nr.3)
+nr.4 <- rename(nr.3, 
+               panduan = sti_key_resp.corr,
+               RT = sti_key_resp.rt,
+               stimulus = target_text,
+               sex = "性别",
+               subject = participant)
+#还可以通过什么方法来改列名呢？
+colnames(nr.3) <- c("panduan1", 
+                    "RT1",
+                    "stimulus1",
+                    "sex1",
+                    "subject1")
+```
+
+
+```{r 对数据进行精修}
+nr.4
+nr.5 <- dplyr::select(nr.4, -panduan) #判断已经完成了他的历史使命
+nr.5 <- dplyr::select(nr.5, subject, sex, stimulus, RT) #排序
+nr.5 <- dplyr::mutate(nr.5, 
+                      RT.1 = round(RT, 3))
+#保留小数点（自愿）
+nr.5
+```
+
+mutate(
+  .data,   #数据框的名字
+  ...,     #核心要处理的变量
+  .by = NULL,
+  .keep = c("all", "used", "unused", "none"),
+  .before = NULL,
+  .after = NULL
+)
+
+```{r mutate函数}
+str(nr.5)
+#需要将性别转换成因子，同时给RT增加2s
+nr.6 <- dplyr::mutate(nr.5, 
+                      sex.fac = factor(sex), #转换性别为因子
+                      RT.1 = RT + 2)      # 给时间+2
+str(nr.6) #查看操作是否正确
+```
+
+
+
+我们已经完成对native数据的整理，有如下操作
+1. 导入数据：批量循环读入数据
+2. 选择变量：根据数据分析目标，选择需要保留的列
+3. 过滤试次：选择判断情况是0或者1的行
+4. 过滤试次：只选择正确的列
+5. 变量转换：对列重新命名，精修，转换因子
+
+```{r 汇总native数据整理}
+native.name <- list.files("./real_data/raw_native")#获取文件夹下所有数据名称
+native.raw <- list() #创建一个空的list
+for (i in native.name){
+  native.raw <- rbind(native.raw,
+                      bruceR::import(paste0("./real_data/raw_native/", i)))
+}
+
+lieming <- c("sti_key_resp.corr", "sti_key_resp.rt", "target_text",  "性别", "participant")
+nr.1 <- dplyr::select(native.raw, lieming)
+
+nr.2 <- dplyr::filter(nr.1, 
+                      sti_key_resp.corr == 1 |
+                      sti_key_resp.corr == 0)
+
+nr.3 <- dplyr::filter(nr.2, 
+                      sti_key_resp.corr == 1)
+
+nr.4 <- rename(nr.3, 
+               panduan = sti_key_resp.corr,
+               RT = sti_key_resp.rt,
+               stimulus = target_text,
+               sex = "性别",
+               subject = participant)
+nr.5 <- dplyr::select(nr.4, -panduan) #判断已经完成了他的历史使命
+nr.5 <- dplyr::select(nr.5, subject, sex, stimulus, RT) #排序
+nr.5 <- dplyr::mutate(nr.5, 
+                      RT.1 = round(RT, 3))
+
+nr.6 <- dplyr::mutate(nr.5, 
+                      sex.fac = factor(sex))
+```
+
+
+```{r 汇总foreign数据整理目标}
+
+```
+
+
+
+6 管道函数（录制视频）
+中间存储了大量过程变量，如何解决呢？
+管道函数（重点理解）"%>%"必须要加载tidyverse包；magrittr包引入了管道操作，能够通过管道将数据从一个函数传给另外一个函数从而用若干函数构成管道依次变换你的数据
+
+管道运算符的意思是将左边运算的结果传递给右边的函数
+x %>% y %>% z
+最新的管道函数是|>
+
+```{r}
+library(tidyverse)
+knitr::include_graphics('./picture/管道函数.png')
+```
+
+
+```{r 管道函数}
+x <- c(4, 5)
+x %>% mean()
+
+month.abb %>%
+  sample(., 6)%>% #函数的参数要写
+  tolower()%>% #转换成小写
+  str_c(., collapse = "|")#将多个字符串连接成一个字符串
+
+month.abb %>%
+  (function(.) {.[1:3]}) #管道函数和匿名函数在一起
+
+iris %>% .$Species
+iris
+
+iris %>% .[1:3]
+```
+
+
+管道函数--pipeline
+```{r 使用管道函数对native数据进行操作}
+#方法1
+native.name <- list.files("./real_data/raw_native")#获取文件夹下所有数据名称
+native.0 <- list() #创建一个空的list
+w <- 0 #创建一个空的索引
+for (i in native.name){
+  w = w + 1
+  native.raw <- bruceR::import(paste0("./real_data/raw_native/", i))%>%
+    dplyr::select(., sti_key_resp.corr, sti_key_resp.rt, 
+                      target_text, "性别", participant)%>%
+    dplyr::filter(., sti_key_resp.corr == 1)%>%
+    rename(., panduan = sti_key_resp.corr,
+           RT = sti_key_resp.rt,
+           stimulus = target_text,
+           sex = "性别",
+           subject = participant)%>%
+    dplyr::select(., -panduan) %>%
+    dplyr::select(., subject, sex, stimulus, RT)%>% #其实是排序
+    dplyr::mutate(., RT = round(RT, 3), #保留小数点
+                  sex = factor(sex))    #存成因子，其实也无所谓
+  native.0[[w]] <- native.raw
+}
+native.df <- rbind(native.0[[1]], native.0[[2]])
+#native.combined <- do.call(rbind, native.raw)
+native.df
+#大语言模型告诉我们可以这样
+```
+
+
+```{r 使用管道函数对native数据进行操作(精炼一点)}
+native.name <- list.files("./real_data/raw_native")#获取文件夹下所有数据名称
+native <- data.frame() #创建一个空的data.frame
+for (i in native.name) {
+  native.raw <- bruceR::import(paste0("./real_data/raw_native/", i)) %>%
+    dplyr::select(.,
+                  sti_key_resp.corr,
+                  sti_key_resp.rt,
+                  target_text,
+                  "性别",
+                  participant) %>%
+    dplyr::filter(., sti_key_resp.corr == 1) %>%
+    rename(
+      .,
+      panduan = sti_key_resp.corr,
+      RT = sti_key_resp.rt,
+      stimulus = target_text,
+      sex = "性别",
+      subject = participant
+    ) %>%
+    dplyr::select(., -panduan) %>%
+    dplyr::select(., subject, sex, stimulus, RT) %>% #其实是排序
+    dplyr::mutate(
+      .,
+      RT = round(RT, 3),
+      #保留小数点
+      sex = factor(sex)
+    )    #存成因子
+  native <- rbind(native, native.raw)
+}
+native
+```
+
+
+```{r 使用管道函数对foreign数据进行操作}
+#将性别也设置为因子，并且设置levels
+#代码要更加简洁
+#所有变量名的开头都要大写字母
+forei.name <- list.files("./real_data/raw_forei")#获取文件夹下所有数据名称
+forei <- data.frame() #创建一个空的data.frame
+for (i in forei.name) {
+  forei.raw <- bruceR::import(paste0("./real_data/raw_forei/", i)) %>%
+    dplyr::select(.,
+                  sti_key_resp.corr,
+                  sti_key_resp.rt,
+                  target_text,
+                  "性别",
+                  participant) %>%
+    dplyr::filter(., sti_key_resp.corr == 1) %>%
+    rename(
+      .,
+      Panduan = sti_key_resp.corr,
+      RT = sti_key_resp.rt,
+      Stimulus = target_text,
+      Sex = "性别",
+      Subject = participant
+    ) %>%
+    dplyr::select(., -Panduan) %>%
+    dplyr::select(., Subject, Sex, Stimulus, RT) %>% #其实是排序
+    dplyr::mutate(
+      .,
+      RT = round(RT, 3),
+      #保留小数点
+      Sex = factor(Sex, levels = c("男", "女"))
+    )    #存成因子
+  forei <- rbind(forei, forei.raw)
+}
+```
+
+
+```{r 使用purrr函数对所有数据进行操作}
+files = fs::dir_ls("./real_data/raw_data")
+song <- function(x){
+  df <- bruceR::import(x)%>%
+    dplyr::select(., sti_key_resp.corr, sti_key_resp.rt, 
+                  target_text, "性别", participant)%>%
+    dplyr::filter(., sti_key_resp.corr == 1)%>%
+    rename(., panduan = sti_key_resp.corr,
+           RT = sti_key_resp.rt,
+           stimulus = target_text,
+           sex = "性别",
+           subject = participant)%>%
+    dplyr::select(., -panduan) %>%
+    dplyr::select(., subject, sex, stimulus, RT)%>%  #其实是排序
+    dplyr::mutate(., RT = round(RT, 3), #保留小数点
+                  sex = factor(sex))
+    return(df)
+}
+hebing.df <- purrr::map_dfr(files, song)
+nrow(hebing.df)
+```
+教材65页-67页有很多关于批量读写数据的代码
+
+
+我们只有被试作答的数据，并没有被试的汉语成绩、分组，没有材料的水平信息
+通过sub.in和material来合并
+```{r 对变量和被试数据框进行精修}
+sub.in
+sub.in <- sub.in %>%
+  rename(participant = beishi.ID,
+         Group = Foreign,
+         Chinese.Level = langugalevel)
+material <- material %>%
+  rename(stimulus = word_trial,
+         Ini.pro = word_ini,
+         End.pro = word_end)
+sub.in;material
+```
+
+
+```{r 合并所有表格}
+#sub.in, material, hebing.df
+hebing <- merge(hebing.df, sub.in, 
+                by.x = "subject", by.y = "participant")%>%
+  merge(., material, by = "stimulus")%>%
+  dplyr::select(subject, everything())%>%
+  arrange(subject)
+hebing
+nrow(hebing)- nrow(hebing.df) #为什么数据差这么多？
+```
+merge(x, y, by = NULL, by.x = NULL, by.y = NULL, all = FALSE,
+all.x = all, all.y = all, sort = TRUE, suffixes = c(".x", ".y"), no.dups = TRUE, allow.cartesian=getOption("datatable.allow.cartesian"),  # default FALSE
+...)
+by：按照两个数据框共有的列进行合并
+by.x:按照x数据框的列进行合并
+by.y:按照y数据框的列进行合并
+all:合并之后，把两个数据框所有的被合并列都合并起来，会有NA
+all.x:合并之后，是否会把X中所有的展示出来
+all.y:合并之后，是否会把Y中所有的展示出来
+```{r merge 函数}
+dt1 <- data.table::data.table(A = letters[1:10], 
+                              X = 1:10, key = "A")
+dt2 <- data.table::data.table(A = letters[5:14], 
+                              Y = 1:10, key = "A")
+dt1; dt2
+hb1 <- merge(dt1, dt2)
+hb2 <- merge(dt1, dt2, all = TRUE)
+hb3 <- merge(dt1, dt2, all.x = TRUE)
+hb2
+```
+
+```{r join函数}
+band = band_members
+instrument = band_instruments
+band; instrument
+left_join(band, instrument, 
+          by = "name")#保留X的全部，匹配Y，教材75-78
+```
+
+```{r 文件写出}
+write_excel_csv(hebing, file = "hebing.csv")
+write_excel_csv(hebing, file = "hebing.xlsx")
+write_excel_csv(material, "material.csv")
+#install.packages("writexl") #也可以通过writexl包来读写数据
+#writexl::write_xlsx(hebing, "heb.xlsx")
+```

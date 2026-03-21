@@ -1,0 +1,632 @@
+---
+title: "Lecture17：R语言的数据美学2"
+author: "author"
+date: "2025-12-24"
+output: html_document
+---
+
+五 坐标轴设置
+六 云雨图
+七 增加显著性
+八 地图
+九 图形保存
+
+```{r 载入包}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+  tidyverse,#数据整理必备包
+  ggpubr, #计算和表注简单的显著性
+  ggplot2, #画图必备包
+  sf, #处理空间数据
+  ggspatial, #对地图进行精装修
+  bruceR, #各种统计检验的包
+  patchwork,#拼图包
+  showtext, #汉字字体包
+  ggsci,#颜色包
+  writexl, #写出excel
+  ggbeeswarm, #蜜蜂图包
+  gghalves, #半幅图包
+  papaja, #主题包
+  ggmapcn,#地图包
+  nortest, #正态分布检验
+  coin, #置换检验
+  simpleboot,#bootstrap
+  boot, #bootstrap
+  svglite #SVG是一种基于 XML 的矢量图像格式。矢量图的最大优点是无限缩放而不失真。
+)
+options(scipen = 9999) #关闭科学计数法
+```
+
+
+五 坐标轴设置
+有的时候需要凸显坐标轴得某些值，有的时候需要隐藏坐标轴的某些值
+```{r }
+knitr::include_graphics("./picture/zuobiaozhou.png")
+knitr::include_graphics("./picture/zhu1.jpg")
+```
+
+```{r 连续变量坐标轴刻度}
+p <- ggplot(mpg, aes(x = cyl, y = hwy)) +
+  geom_point(position = position_jitter(width = 0.2), alpha = 0.6) +
+  labs(title = "自定义坐标轴刻度中断 (breaks)",
+       x = "气缸数 (Cylinders)",
+       y = "高速公路燃油效率 (MPG)")
+p
+
+# 聚焦于特定区间并设置刻度，我想把纵坐标显示的详细点
+p + scale_y_continuous(breaks = c(10, 20, 30))
+```
+
+
+
+```{r 分类变量坐标轴刻度}
+p <- ggplot(mpg, aes(x = class, y = hwy)) +
+  geom_boxplot()
+print(p)
+mpg
+# 自定义类别顺序，我只想显示某一些水平
+p + scale_x_discrete(limits = c("subcompact", "compact", "midsize"))
+```
+
+在心理语言学里面，经常对连续变量的坐标轴进行修改，即y轴，其他常用坐标轴函数：
+自定义x/y轴的范围：
+##coord_cartesian(ylim = c(0,50))
+##xlim(c(7,8))
+##ylim()
+
+中文教程
+https://zhuanlan.zhihu.com/p/370223674
+
+六 云雨图
+1. 云雨图适合什么类型的实验数据??
+```{r 别人的云雨图}
+knitr::include_graphics("./picture/yunyutu1.png")
+knitr::include_graphics("./picture/yunyutu2.png")
+knitr::include_graphics("./picture/yunyutu3.jpg")
+```
+
+2. 云雨图的本质
+（1）小提琴图表示云彩（分布）
+（2）散点图：对应被试在每个水平上的得分或者成绩，例如30个同学在心理语言学实验设计课程上的成绩
+（3）箱图（可以省略）
+（4）连线（以被试为单位），反映了被试在几个水平上的变化，例如，学于文勃课程前的数据分析水平和学习课程之后的水平
+```{r 载入数据}
+wd.1 <- import("./data/wd.1.csv") #读入数据
+wd.2 <- wd.1 %>%
+  group_by(age, subid)%>% #按照年龄和被试编号整理数据
+  summarise(M = round(mean(pred.tran),3))%>% #整理因变量
+  as.data.frame()
+
+fig.age <- 
+  ggplot(wd.2,aes(x= age,y = M, fill=age))+ 
+  geom_half_violin(aes(color = age), position = position_nudge(x = 0.25),
+                   side = "r", width=2)+ #小提琴在右侧
+  geom_jitter(aes(fill = age), #填充映射不同的年龄
+              shape = 21, #形状
+              size = 2, #大小
+              width = 0.07,
+              color = 'black')+ #外圈的颜色
+  scale_color_npg()+ #color的颜色
+  scale_fill_npg()+ #填充的颜色
+  theme_bw()+ #使用主题
+  labs(x = "情绪类别",  
+       y = "四种情绪正确可能性") +
+  theme(axis.text.y = element_text(color = 'black',size=15), #设置坐标轴的字体
+        axis.text.x = element_text(color = 'black',size=15),
+        axis.title.x = element_text(color = 'black',size=17),
+        axis.title.y = element_text(color = 'black',size=17),
+        legend.position = "none")
+fig.age
+```
+
+
+######################################
+练习1：
+(1)按照年龄顺序排序
+(2)小提琴图的边框和散点的填充颜色不同
+(3)更换一个主题
+(4)指定特定配色
+######################################
+
+```{r 练习答案}
+wd.2$age <- factor(wd.2$age, levels = c("5 岁", "6 岁", "7 岁", 
+                                        "8 岁", "9 岁", "10 岁", 
+                                        "11 岁", "12 岁"))
+
+
+colors_2 <- c("#cc340c", "#e8490f", "#f18800", "#e4ce00", "#9ec417", "#13a983" ,"#44c1f0" ,"#3f60aa")
+
+fig.age <- 
+  ggplot(wd.2,aes(x = age,y = M))+ 
+  geom_half_violin(aes(fill = age),
+                   position = position_nudge(x = 0.25),
+                   side = "r", #小提琴在右侧
+                   width = 0.8, 
+                   linewidth = 1.5,
+                   color = "grey89")+ 
+  geom_jitter(aes(fill = age, 
+                  color = age), #填充映射不同的年龄
+              shape = 21,
+              size = 2, #大小
+              width = 0.1)+ 
+  scale_color_manual(values = colors_2)+
+  #scale_fill_brewer(palette="Set1") +
+  #scale_color_discrete()+
+  #scale_color_npg()+ #color的颜色
+  scale_fill_bmj()+ #填充的颜色
+  theme_test()+ #使用主题
+  labs(x = "情绪类别",  
+       y = "四种情绪正确可能性") +
+  theme(axis.text.y = element_text(color = 'black',size=15), #设置坐标轴的字体
+        axis.text.x = element_text(color = 'black',size=15),
+        axis.title.x = element_text(color = 'black',size=17),
+        axis.title.y = element_text(color = 'black',size=17),
+        legend.position = "none")
+fig.age
+```
+
+
+```{r 连接线}
+knitr::include_graphics("./picture/yunyutu4.png")
+```
+
+
+3. 具体代码
+```{r 汤明月数据}
+meta_dep <- import("./data/meta_dep.csv")
+meta_dep
+fig_meta <- ggplot(data = meta_dep, 
+                   aes(x = vars, y = Scores))+
+  geom_half_violin(aes(split = vars, color = vars), 
+                   size = 2, side = 2, alpha = 0.8)+
+  geom_boxplot(aes(color = vars), width = 0.3, notch = TRUE, outlier.shape = 21)+
+  geom_jitter(aes(x = vars, 
+                  color = vars, 
+                  fill = vars), 
+              alpha = 0.8, 
+              size = 1.5, pch = 21, #填充的类型
+              width = 0.04)+
+  geom_line(aes(group = as.factor(number)),  ##重点在这里
+            color = "grey", alpha = 0.2)+
+  annotate("text", x = 1.5, y = 1.05, label="**", size = 6.5, color = "black")+
+  facet_wrap(. ~ label)+
+  labs(x = NULL, y = "Accuracy")+
+  theme_test()+
+  scale_color_manual(values = c("#1B9E77","#D95F02"))+
+  scale_fill_manual(values = c("#1B9E77","#D95F02"))+
+  scale_x_discrete(labels = c("Phon" = "Phonological Awareness", 
+                              "Orth" = "Orthographic Awareness"))+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(size = 0.2, color = "#e5e5e5"),
+        axis.title.y = element_text(color = "black", size =13),
+        axis.text.y = element_text(color = "black", size = 13),
+        axis.text.x = element_text(color = "black", size = 13))
+fig_meta
+```
+
+
+#############################
+依据变量的水平进行分面
+facet_wrap(. ~ 变量)
+#############################
+
+七 增加显著性
+(一)P图
+(二)包
+```{r 绘制基础图形}
+data <- iris
+data$Group <- NA
+data$Group[sample(1:nrow(data), size = (nrow(data)/2))] <- "A"
+data$Group[is.na(data$Group)] <- "B"
+p <- ggplot(data = data, aes(x = Species, y = Sepal.Width))+
+  geom_boxplot(aes(fill = Species), alpha = 0.7)+
+  geom_jitter(aes(color = Species))+
+  scale_fill_manual(values = c("#f79f1f", "#a3cb38", "#1289a7"))+
+  scale_color_manual(values = c("#f79f1f", "#a3cb38", "#1289a7"))+
+  theme_bw()+
+  theme(panel.grid = element_blank())
+p
+```
+
+
+```{r 使用ggpubr包画显著性}
+compare_list <- list(c("setosa", "versicolor"), 
+                     c("versicolor", "virginica"))
+pp <- ggplot(data = data, aes(x = Species, y = Sepal.Width))+
+  geom_boxplot(aes(fill = Species), alpha = 0.7)+
+  geom_jitter(aes(color = Species))+
+  scale_fill_manual(values = c("#f79f1f", "#a3cb38", "#1289a7"))+
+  scale_color_manual(values = c("#f79f1f", "#a3cb38", "#1289a7"))+
+  theme_bw()+
+  theme(panel.grid = element_blank())+
+  stat_compare_means(comparisons = compare_list, method = "wilcox.test",
+                     #label = "p.signif" #显著性星号
+                     label = "p.format" #具体数值
+                     )
+pp
+```
+
+
+(三)以线条的形式画显著性
+```{r 老师作图}
+knitr::include_graphics("./picture/fig3.png")
+```
+
+
+```{r 代码}
+ab_new <- import("./data/ab_new.csv")
+fig3B <- ggplot(data = ab_new, aes(x = word_type, y = Rating))+
+  see::geom_violindot(aes(color = word_type, fill = word_type), alpha = 0.5, dots_size = 2)+
+  scale_color_manual(values = c("deepskyblue3", "darkorange", "gray40"))+
+  scale_fill_manual(values = c("deepskyblue3", "darkorange", "gray40"))+
+  theme_classic() + 
+  theme(legend.position = "none")+
+  geom_segment(aes(x = 1, y = 7.25, #添加线段 设置起始位置的x和y的坐标
+                   xend = 2, yend = 7.25),  #设置结束位置的x和y的坐标
+               linewidth = 0.5)+ #设置线段的宽度
+  annotate("text",x = 1.5,y = 7.3,  #添加注释，注释是文本，x和y的坐标
+           label = "**", size = 7,  #添加的内容是什么，大小，颜色
+           color = "darkred")+
+  geom_segment(aes(x = 2, y = 7.4, xend = 3, yend = 7.4), linewidth = 0.5)+
+  annotate("text",x = 2.5,y = 7.45, label = "**", size = 7, color = "darkred")+
+  geom_segment(aes(x = 1, y = 7.7, xend = 3, yend = 7.7), linewidth = 0.5)+
+  annotate("text",x = 2,y = 7.75, label = "**", size = 7, color = "darkred")+
+  labs(x = NULL, y = "Scores of familairity rating task")+
+  theme(axis.text.x = element_text(family = "TNR", size = 12, color= "black", face = "bold"),
+        axis.text.y = element_text(family = "TNR", color = "black", size = 12, face = "bold"),
+        axis.title.y = element_text(family = "TNR", size = 14, face = "bold"))
+```
+
+###############################################
+练习2
+1. 把云雨图的颜色改一改，point的形状改一改，纵坐标范围改一改，透明度改一改
+2. 把显著性下面也加上中括号，显著性✳换成红色和绿色
+3. 分面上的标签的字体大小和颜色是不是可以改改？(问问AI修改分面的字体是什么函数，但不要给例子)
+###############################################
+
+八 地图
+（一）简单地图
+```{r 城市/省份地图}
+# install.packages(c("otel", "promises"), 
+#                  dependencies = TRUE,
+#                  repos = "https://cran.r-project.org")
+
+#城市地图
+ggplot() + geom_mapcn(
+    admin_level    = "city",
+    filter_attribute = "name",
+    filter         = "南通市",
+    fill           = "tomato",
+    color          = "white",
+    linewidth      = 0.3
+  ) +
+  theme_minimal()
+
+#省份地图
+ggplot() + geom_mapcn(
+    admin_level    = "province",      # 省级底图
+    filter_attribute = "name_en",     # 用英文名称字段
+    filter         = "Jiangsu",       # 只要江苏
+    fill           = "tomato",
+    color          = "white",
+    linewidth      = 0.3
+  ) +
+  theme_minimal()
+```
+
+
+```{r 方言地图}
+data <- sf::st_read("./map/city/T2024年初地级.shp")
+jiangsu <- data %>% filter(NAME_1 == "Jiangsu")
+set.seed(42) 
+cities <- jiangsu %>% pull(NAME_2) %>% unique()
+wu   <- sample(cities, 3)                # 3 个吴语
+zhongyuan <- sample(setdiff(cities, wu), 5)  # 5 个中原
+jianghuai <- setdiff(cities, c(wu, zhongyuan)) # 其余江淮
+jiangsu <- jiangsu %>%
+  mutate(dialect = case_when(
+    NAME_2 %in% wu        ~ "东北话",
+    NAME_2 %in% zhongyuan ~ "东北话",
+    TRUE                  ~ "东北话"
+  ))
+fangyan <- ggplot(jiangsu) +
+  geom_sf(aes(fill = FY), color = "white", size = .4) +
+  scale_fill_manual(values = c("jianghuai"   = "#1f77b4",
+                               "dongbei" = "#ff7f0e",
+                               "wuyu" = "#2ca02c")) +
+  geom_sf_text(aes(label = 地级), size = 3, fontface = "bold", color = "white") +
+  labs(title = "江苏省方言区示意（2024）",
+       fill = "方言区") +
+  theme_void() +
+  theme(panel.grid = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+print(fangyan)
+ggsave("./figure/fangyan.png",fangyan,dpi = 300)
+```
+
+
+（二）复杂地图
+```{r 获取地图}
+china_pro <- sf::st_read("./map/中华人民共和国.json")
+shandong <- sf::st_read("./map/山东.json")
+```
+
+
+```{r 单一地图}
+SD <- ggplot(data = shandong) + 
+  geom_sf() + 
+  theme_apa()
+
+cols16 <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3",
+            "#FF7F00", "#FFFF33", "#A65628", "#F781BF",
+            "#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3",
+            "#A6D854", "#FFD92F", "#E5C494", "#B3B3B3")
+
+SD.1 <- ggplot(shandong) +
+  geom_sf(aes(fill = name), color = "grey40", size = .25) +  # fill 映射到分类变量
+  scale_fill_manual(values = cols16) +      # 自选配色
+  theme_apa() +
+  theme(legend.position = "right")
+SD.1
+```
+
+```{r 复杂地图}
+china <- ggplot(data = china_pro) + 
+  geom_sf() + 
+  theme_minimal()
+
+ggplot(china_pro)+  geom_sf(color='black',#线条颜色          
+                            fill=NA,#填充色          
+                            size=0.8)+#地图线条粗细  
+  annotation_scale(location = "bl", width_hint = 0.3) +#添加比例尺并调整位置及长度
+  annotation_north_arrow(location = "tl", 
+                         which_north = F,                          
+                         pad_x = unit(0.05, "in"), 
+                         pad_y = unit(0.05, "in"),                         
+                         style = north_arrow_nautical)+#添加指北针  
+  coord_sf(crs = "+proj=laea +lat_0=40 +lon_0=104")+#坐标参考系统(CRS)  #主题设置 
+  theme_bw()+  
+  theme(text = element_text(size = 14,face = "bold"),        
+        panel.grid = element_blank(),        
+        axis.line = element_blank())+  labs(x='', y='')
+```
+
+
+```{r 生成数据}
+df1 <- data.frame(  lon=runif(100, min = 85, max = 120),  
+                    lat=runif(100, min = 30, max = 41),
+                    group=rep(c('1980','2000','2005','2010'),
+                              times=c(10,25,25,40)))
+df2 <- data.frame(  lon=runif(40, min = 100, max = 120),  
+                    lat=runif(40, min = 22, max = 30),
+                    group=rep(c('1980','2000','2005','2010'),
+                              times=c(10,20,5,5)))
+df3 <- data.frame(  lon=runif(40, min = 120, max = 130),  
+                    lat=runif(40, min = 41, max = 50),
+                    group=rep(c('1980','2000','2005','2010'),
+                              times=c(5,15,10,10)))
+df4 <- data.frame(  lon=runif(60, min = 80, max = 90),  
+                    lat=runif(60, min = 30, max = 45),
+                    group=rep(c('1980','2000','2005','2010'),
+                              times=c(10,15,25,10)))
+df <- rbind(df1,df2,df3,df4)
+data <- data.frame(group=c('1980','2000','2005','2010'),                  
+                   value=c(35,75,65,65))
+```
+
+```{r 结合数据}
+p <- ggplot(data,aes(group,value,fill=group))+  
+  geom_col()+  
+  scale_fill_manual(values = c("#00c700", "#da0000","#0054da","#6a3d00"))+ 
+  theme_classic()+  
+  theme(legend.position = "none",        
+        axis.text.x = element_blank(),        
+        axis.text.y = element_text(color = "black",size=12),        
+        axis.line.x = element_blank(),        
+        axis.ticks.x = element_blank(),        
+        panel.background = element_blank(),        
+        plot.background = element_blank())+  
+  labs(x='', y='')+  
+  scale_y_continuous(expand = c(0,0))
+p#地图中添加散点图并将柱状图作为子图加入
+
+df_st_as_sf <- st_as_sf(df,coords = c("lon", "lat"),crs = 4326)#绘图
+
+ditu <- ggplot(china_pro)+  
+  geom_sf(color='black',fill=NA, size=0.8)+
+  geom_sf(df_st_as_sf,mapping=aes(color=group),shape=16,size=2.5)+
+  annotation_scale(location = "bl", width_hint = 0.3) +#添加比例尺并调整位置及长度
+  annotation_north_arrow(location = "tl", 
+                         which_north = F,                          
+                         pad_x = unit(0.05, "in"), 
+                         pad_y = unit(0.05, "in"),                         
+                         style = north_arrow_nautical)+#添加指北针  
+  coord_sf(crs = "+proj=laea +lat_0=40 +lon_0=104")+  
+  theme_bw()+  
+  theme(text = element_text(size = 14,face = "bold"),        
+                     panel.grid = element_blank(),        
+                     axis.line = element_blank(),        
+                     legend.position = c(0.1,0.3),        
+                     legend.background = element_blank())+  
+  labs(x='', y='',color=NULL)+  
+  scale_color_manual(values = c("#00c700", "#da0000","#0054da","#6a3d00"))+  #柱状图插入，注意，这里需要自己调整坐标以适应地图  
+  annotation_custom(grob=ggplotGrob(p),                   
+                    ymin = 200000, ymax = 1600000,                     
+                    xmin=-1200000, xmax=800000)
+ditu
+```
+
+
+#####
+还要将南海地图插进去
+做中国地图的时候一定要检查台湾和南海
+#####
+
+
+九 图形保存
+(一)使用patchwork拼图
+```{r 基础拼图}
+p1 <- ggplot(mtcars, aes(x = mpg, y = wt)) +
+  geom_point() + ggtitle('图1')
+p2 <- ggplot(mtcars, aes(x = mpg, y = disp, group = gear)) +
+  geom_boxplot() + ggtitle('图2')
+p3 <- ggplot(mtcars, aes(x = hp, y = wt, colour = mpg)) +
+  geom_point() + ggtitle('图3')
+p4 <- ggplot(mtcars, aes(x = gear)) +
+  geom_bar() + ggtitle('图4') +
+  facet_wrap(~ cyl)
+p1
+p2
+p3
+p4
+p1 + p2 + p3 + p4
+```
+
+详见：
+https://cloud.tencent.com/developer/article/1889233
+https://patchwork.data-imaginist.com/
+https://patchwork.data-imaginist.com/articles/patchwork.html
+
+（二）图形保存
+1. 保存图片的类型
+A. 保存成图片
+B. 保存成pdf
+C. 保存成svg格式
+
+```{r 图片类型}
+ggsave("./figure/ditu.pdf",
+       plot = ditu,
+       width = 9,
+       height = 6 #默认单位是英寸
+)
+
+ggsave( "./figure/ditu.png", 
+        plot = ditu,
+        width = 9,
+        height = 6,
+)
+
+ggsave("./figure/dtgaoxiangsu100.png", plot = ditu, dpi = 100)#对于每个平方单位100个像素，只适用于图形
+ggsave("./figure/dtgaoxiangsu300.png", plot = ditu, dpi = 300) #增加像素后更加清楚
+ggsave("./figure/ditu.svg", plot = ditu, dpi = 300)#可以直接拖拽到word中
+```
+
+2. 保存图片的单位
+A. 默认英寸
+B. 常用厘米
+C. 也用mm
+```{r 图片大小}
+ggsave("./figure/ditucm.jpg",
+       plot = ditu,
+       width = 9,
+       height = 6,
+       units = "cm"  #换用厘米单位后，图形更小
+)
+
+ggsave("./figure/dituin.jpg",
+       plot = ditu,
+       width = 9,
+       height = 6,
+       units = "in"  #换用厘米单位后，图形更小
+)
+```
+
+
+（三）图形的边距
+1. 页边距的参数在主题（theme）下
+plot.margin：整张图（包括坐标轴、标题、图例等）最外一圈的留白
+```{r 默认页边距}
+set.seed(123) # 设置随机种子保证结果可重现
+df <- data.frame(x = rnorm(n = 5000))
+
+ggplot(df, aes(x = x)) +
+  geom_histogram(
+    bins = 30,           # 明确设置分箱数量，避免警告
+    fill = "#6baed6",    # 更改填充色
+    color = "white",     # 添加白色边框，使柱状图更清晰
+    alpha = 0.8          # 略微透明，视觉更舒适
+  ) +
+  theme(plot.background = element_rect(fill = '#e3fbff'))
+```
+
+```{r 修改页边距}
+ggplot(df, aes(x=x)) + 
+  geom_histogram() +
+  theme(plot.margin = unit(c(3, #最上面边框距离图形的距离
+                             1, #最右边边框距离图形的距离
+                             3, #最下边边框距离图形的距离
+                             1),#最左边边框距离图形的距离
+                           'cm'),
+        plot.background = element_rect(fill='#e3fbff')) 
+```
+
+
+#########
+练习3：
+把江苏省份的方言地图、练习1和练习2的图拼起来，加上title自己的姓名和学号，保存成jpg格式发到微信群作为平时分数
+#########
+
+十 中文字体
+1. 最好的办法就是发英文文章
+2. p图
+3. 代码调整
+```{r kimi如是说}
+## 生成示例数据
+set.seed(123)
+df <- data.frame(
+  年份 = rep(2018:2022, each = 16),
+  城市 = rep(
+    c(
+      "济南",
+      "青岛",
+      "淄博",
+      "枣庄",
+      "东营",
+      "烟台",
+      "潍坊",
+      "济宁",
+      "泰安",
+      "威海",
+      "日照",
+      "临沂",
+      "德州",
+      "聊城",
+      "滨州",
+      "菏泽"
+    ),
+    times = 5
+  ),
+  GDP  = round(runif(80, 200, 1200), 1)   # 随机 200–1200 亿元
+)
+
+# 1. 把系统里的 SimSun 注册到 R 里（路径找不到就用 windowsFonts() 那行）
+font_add(family = "SimSun", regular = "simsun.ttc")   # 常规 SimSun
+# 如果文件不在默认路径，可改成完整路径，例如
+# font_add("SimSun", "C:/Windows/Fonts/simsun.ttc")
+
+# 2. 画任何图
+p <- ggplot(df, aes(x = 城市, y = GDP)) +  # ← 去掉引号
+  geom_boxplot(width = .5) +
+  labs(title = "山东省各市GDP分布（2018–2022）", x = "城市", y = "GDP（亿元）") +
+  theme_bw(base_family = "SimSun") +
+  theme(
+    plot.title   = element_text(
+      family = "SimSun",
+      size = 14,
+      face = "bold"
+    ),
+    axis.title   = element_text(family = "SimSun"),
+    axis.text.x  = element_text(
+      family = "SimSun",
+      angle = 45,
+      hjust = 1
+    ),
+    axis.text.y  = element_text(family = "SimSun")
+  )
+p
+```
+
+

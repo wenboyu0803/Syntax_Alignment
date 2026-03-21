@@ -1,0 +1,484 @@
+---
+title: "数据处理"
+author: "author"
+date: "2026-03-06"
+output: html_document
+---
+
+```{r 基频、强度和语速是否存在韵律协同}
+# 加载必要的包
+library(readxl)
+library(dplyr)
+
+# 读取数据
+data <- read_excel("总数据.xlsx")
+
+# 获取唯一的声调类型
+tones <- unique(data$声调)
+# 需要检验的指标
+metrics <- c("基频平均值", "振幅平均值", "语速")
+
+# 设置随机种子以确保结果可重复
+set.seed(1234)
+
+# 创建存储结果的数据框
+results <- data.frame(
+  声调 = character(),
+  指标 = character(),
+  组内均值 = numeric(),
+  组间均值 = numeric(),
+  差异值 = numeric(),
+  p值 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# 外层循环：遍历每个声调
+for (tone in tones) {
+  # 中层循环：遍历每个指标
+  for (metric in metrics) {
+    
+    # 提取当前声调当前指标的组内差异数据
+    A <- data %>%
+      filter(声调 == tone, 差异类型 == "组内差异") %>%
+      pull(metric)
+    
+    # 提取当前声调当前指标的组间差异数据
+    B <- data %>%
+      filter(声调 == tone, 差异类型 == "组间差异") %>%
+      pull(metric)
+    
+    # 直接使用您的代码逻辑，不检查数据长度
+    # 计算实际观测到的差异
+    DIFF <- mean(A) - mean(B)
+    
+    # 置换检验（完全使用您的代码逻辑）
+    DIFF_null <- numeric(length = 10000)
+    
+    # 合并两组数据
+    combined_data <- c(A, B)
+    
+    for (i in 1:10000) {
+      # 直接使用30和15，不检查数据长度
+      Aidx <- sample(1:30, 15)  # 您的原样代码
+      A_permutation <- combined_data[Aidx]
+      B_permutation <- combined_data[-Aidx]  # 体现了无放回
+      DIFF_null[i] <- mean(A_permutation) - mean(B_permutation)
+    }
+    
+    # 计算双尾p值
+    #p <- min(mean(DIFF_null > DIFF), mean(DIFF_null < DIFF)) * 2
+    p <- mean(abs(DIFF_null) >= abs(DIFF))
+    
+    # 存储结果
+    results <- rbind(results, data.frame(
+      声调 = tone,
+      指标 = metric,
+      组内均值 = mean(A),
+      组间均值 = mean(B),
+      差异值 = DIFF,
+      p值 = p,
+      stringsAsFactors = FALSE
+    ))
+    
+    # 输出当前检验结果
+    cat("\n====================\n")
+    cat("声调:", tone, "| 指标:", metric, "\n")
+    cat("组内样本数:", length(A), "| 组间样本数:", length(B), "\n")
+    cat("组内均值:", mean(A), "| 组间均值:", mean(B), "\n")
+    cat("差异值:", DIFF, "\n")
+    cat("p值:", p, "\n")
+    if (p < 0.05) {
+      cat("结果: 显著 (p < 0.05)\n")
+    } else {
+      cat("结果: 不显著\n")
+    }
+  }
+}
+
+# 输出所有结果
+cat("\n\n==================== 汇总结果 ====================\n")
+print(results)
+
+# 添加显著性标记
+results$显著性 <- ifelse(results$p值 < 0.001, "***",
+                       ifelse(results$p值 < 0.01, "**",
+                              ifelse(results$p值 < 0.05, "*", "ns")))
+
+# 按声调排序
+results <- results[order(results$声调, results$指标), ]
+
+# 输出格式化结果
+cat("\n==================== 格式化结果 ====================\n")
+for (i in 1:nrow(results)) {
+  cat(sprintf("%s - %s: 差异=%.4f, p=%.4f %s\n",
+              results$声调[i], 
+              results$指标[i],
+              results$差异值[i],
+              results$p值[i],
+              results$显著性[i]))
+}
+
+# 保存结果到CSV文件
+write.csv(results, "置换检验结果.csv", row.names = FALSE, fileEncoding = "UTF-8")
+cat("\n结果已保存到: 置换检验结果.csv\n")
+```
+
+
+
+```{r 声调的影响}
+# 加载必要的包
+library(tidyverse)
+library(broom)
+
+# 1. 读取Excel数据
+data <- readxl::read_excel("差值三个指标.xlsx")
+
+# 2. 重命名列名
+data <- data %>%
+  rename(
+    subject = "组别",
+    tone = "声调",
+    f0_mean = "基频平均值（组内-组间）",
+    amp_mean = "振幅平均值（组内-组间）",
+    speech_rate = "语速（组内-组间）"
+  )
+
+# 3. 定义要分析的变量列表
+variables <- c("f0_mean", "amp_mean", "speech_rate")
+
+# 4. 置换检验函数
+permutation_test <- function(data, variable, n_permutations = 10000) {
+  cat(paste("\n=== 置换检验：", variable, "===\n"))
+  
+  # 计算原始F值
+  formula <- as.formula(paste(variable, "~ tone"))
+  original_anova <- aov(formula, data = data)
+  original_f <- summary(original_anova)[[1]]$"F value"[1]
+  
+  cat(paste("原始F值:", round(original_f, 4), "\n"))
+  
+  # 进行置换检验
+  perm_f_values <- numeric(n_permutations)
+  
+  for (i in 1:n_permutations) {
+    # 随机置换因变量值（保持组结构）
+    perm_data <- data
+    perm_data[[variable]] <- sample(data[[variable]])
+    
+    # 计算置换后的F值
+    perm_anova <- aov(formula, data = perm_data)
+    perm_f_values[i] <- summary(perm_anova)[[1]]$"F value"[1]
+  }
+  
+  # 计算p值：置换F值大于等于原始F值的比例
+  p_value <- sum(perm_f_values >= original_f) / n_permutations
+  
+  cat(paste("置换检验p值:", round(p_value, 5), "\n"))
+  cat(paste("置换次数:", n_permutations, "\n"))
+  
+  # 返回结果
+  return(list(
+    variable = variable,
+    original_f = original_f,
+    p_value = p_value,
+    perm_f_values = perm_f_values,
+    n_permutations = n_permutations
+  ))
+}
+
+# 5. 对每个变量进行置换检验
+results <- list()
+
+for (var in variables) {
+  results[[var]] <- permutation_test(data, var, n_permutations = 10000)
+}
+
+# 6. 显示所有结果
+cat("\n=== 置换检验结果汇总 ===\n")
+for (var in variables) {
+  result <- results[[var]]
+  significance <- ifelse(result$p_value < 0.05, "显著", "不显著")
+  
+  cat(paste("\n变量:", var, "\n"))
+  cat(paste("原始F值:", round(result$original_f, 4), "\n"))
+  cat(paste("置换p值:", round(result$p_value, 5), "\n"))
+  cat(paste("显著性:", significance, "\n"))
+}
+```
+
+
+```{r 等价检验 自然声调}
+library(TOSTER)
+library(car)
+library(readxl)
+
+# 读取数据
+data <- read_excel("总数据.xlsx", sheet = 1)
+
+# 设置效应量
+d_value <- 1.2
+tone <- "自然声调"  # 直接定义
+
+cat("\n=== 声调:", tone, "===\n")
+
+# 提取数据
+tone_data <- data[data$声调 == tone, ]
+within_data <- unlist(tone_data[tone_data$差异类型 == "组内差异", "基频平均值"])
+between_data <- unlist(tone_data[tone_data$差异类型 == "组间差异", "基频平均值"])
+# 创建数据框
+  ab <- data.frame(
+    value = c(within_data, between_data),
+    condition = c(rep("组内", length(within_data)), rep("组间", length(between_data)))
+  )
+  
+  # 计算合并标准差和边界
+  n1 <- length(within_data)
+  n2 <- length(between_data)
+  pooled_sd <- sqrt(((n1-1)*var(within_data) + (n2-1)*var(between_data)) / (n1 + n2 - 2))
+  eq_boundary_raw <- d_value * pooled_sd
+  
+  # 添加分析设置输出
+  cat("=== 分析设置 ===\n")
+  cat("合并标准差 =", round(pooled_sd, 2), "\n")
+  cat("效应量d =", d_value, "\n")
+  cat("对应的原始单位边界 = ±", round(eq_boundary_raw, 2), "\n")
+  cat("实际观察到的差异 =", round(mean(between_data) - mean(within_data), 2), "\n\n")
+  
+  # 方差齐性检验
+  levene_result <- car::leveneTest(value ~ condition, data = ab)
+  var_equal_flag <- ifelse(levene_result$`Pr(>F)`[1] > 0.05, TRUE, FALSE)
+  
+  # 进行等价检验
+  TOS.ab <- dataTOSTtwo(ab, deps = "value", group = "condition", 
+                        var_equal = var_equal_flag,
+                        low_eqbound = -eq_boundary_raw, 
+                        high_eqbound = eq_boundary_raw,
+                        desc = FALSE, plots = FALSE)
+  
+  cat("=== TOST等价检验结果 ===\n")
+  print(TOS.ab$tost) 
+```
+
+
+
+```{r 等价检验}
+library(TOSTER)
+library(car)
+library(readxl)
+
+data <- read_excel("差值三个指标.xlsx", sheet = 1)
+
+tones <- c("全阴平调", "全阳平调", "全去声调", "自然声调")
+tone_pairs <- combn(tones, 2, simplify = FALSE)
+
+# ========== 基频(Hz) ==========
+eq_boundary_f0 <- 1.0
+
+freq_data_f0 <- data.frame(
+  value = data$`基频平均值（组内-组间）`,
+  group = factor(data$`声调`, levels = tones)
+)
+
+cat("=== 基频分析 ===\n")
+cat("等价边界 = ±", eq_boundary_f0, "Hz\n")
+
+for (pair in tone_pairs) {
+  tone1 <- pair[1]
+  tone2 <- pair[2]
+  
+  cat("\n---", tone1, "vs", tone2, "---\n")
+  
+  data1 <- freq_data_f0$value[freq_data_f0$group == tone1]
+  data2 <- freq_data_f0$value[freq_data_f0$group == tone2]
+  
+  cat("样本量:", length(data1), "/", length(data2), "\n")
+  cat("均值差 =", round(mean(data1) - mean(data2), 2), "Hz\n")
+  
+  ab <- data.frame(value = c(data1, data2),
+                   condition = c(rep(tone1, length(data1)), rep(tone2, length(data2))))
+  
+  lev <- leveneTest(value ~ condition, data = ab)
+  
+  TOS <- dataTOSTtwo(ab, deps = "value", group = "condition",
+                     var_equal = lev$`Pr(>F)`[1] > 0.05,
+                     low_eqbound = -eq_boundary_f0,
+                     high_eqbound = eq_boundary_f0,
+                     desc = FALSE, plots = FALSE)
+  
+  print(TOS$tost)
+}
+
+# ========== 音强(dB) ==========
+eq_boundary_amp <- 2.5
+
+freq_data_amp <- data.frame(
+  value = data$`振幅平均值（组内-组间）`,
+  group = factor(data$`声调`, levels = tones)
+)
+
+cat("\n\n=== 音强分析 ===\n")
+cat("等价边界 = ±", eq_boundary_amp, "dB\n")
+
+for (pair in tone_pairs) {
+  tone1 <- pair[1]
+  tone2 <- pair[2]
+  
+  cat("\n---", tone1, "vs", tone2, "---\n")
+  
+  data1 <- freq_data_amp$value[freq_data_amp$group == tone1]
+  data2 <- freq_data_amp$value[freq_data_amp$group == tone2]
+  
+  cat("样本量:", length(data1), "/", length(data2), "\n")
+  cat("均值差 =", round(mean(data1) - mean(data2), 2), "dB\n")
+  
+  ab <- data.frame(value = c(data1, data2),
+                   condition = c(rep(tone1, length(data1)), rep(tone2, length(data2))))
+  
+  lev <- leveneTest(value ~ condition, data = ab)
+  
+  TOS <- dataTOSTtwo(ab, deps = "value", group = "condition",
+                     var_equal = lev$`Pr(>F)`[1] > 0.05,
+                     low_eqbound = -eq_boundary_amp,
+                     high_eqbound = eq_boundary_amp,
+                     desc = FALSE, plots = FALSE)
+  
+  print(TOS$tost)
+}
+
+# ========== 语速 ==========
+eq_boundary_sr <- 0.3
+
+freq_data_sr <- data.frame(
+  value = data$`语速（组内-组间）`,
+  group = factor(data$`声调`, levels = tones)
+)
+
+cat("\n\n=== 语速分析 ===\n")
+cat("等价边界 = ±", eq_boundary_sr, "\n")
+
+for (pair in tone_pairs) {
+  tone1 <- pair[1]
+  tone2 <- pair[2]
+  
+  cat("\n---", tone1, "vs", tone2, "---\n")
+  
+  data1 <- freq_data_sr$value[freq_data_sr$group == tone1]
+  data2 <- freq_data_sr$value[freq_data_sr$group == tone2]
+  
+  cat("样本量:", length(data1), "/", length(data2), "\n")
+  mean_diff <- mean(data1, na.rm=TRUE) - mean(data2, na.rm=TRUE)
+  cat("均值差 =", round(mean_diff, 4), "\n")
+  
+  ab <- data.frame(value = c(data1, data2),
+                   condition = c(rep(tone1, length(data1)), rep(tone2, length(data2))))
+  
+  lev <- leveneTest(value ~ condition, data = ab)
+  
+  TOS <- dataTOSTtwo(ab, deps = "value", group = "condition",
+                     var_equal = lev$`Pr(>F)`[1] > 0.05,
+                     low_eqbound = -eq_boundary_sr,
+                     high_eqbound = eq_boundary_sr,
+                     desc = FALSE, plots = FALSE)
+  
+  print(TOS$tost)
+}
+
+
+```
+
+
+
+```{r 画图}
+pacman::p_load(
+  here,
+  papaja,
+  gghalves,
+  tidyverse,
+  ggplot2,
+  patchwork,
+  showtext,
+  ggsci,
+  writexl
+)
+options(scipen = 9999, digits = 5)
+
+rm(list = ls())        # remove all variables in memory
+### Get the directory of current script (only for r-studio)
+curWD <- dirname(rstudioapi::getSourceEditorContext()$path) 
+setwd(curWD)
+```
+
+
+```{r fig2 不控制声调条件下三个声学指标的组间差异和组内差异比较}
+data <- readxl::read_excel("总数据.xlsx")
+data_bkz <- data |> dplyr::filter(声调 == "自然声调") |>
+  dplyr::mutate(across(where(is.numeric), ~ round(.x, 2))) |>
+  pivot_longer(cols = "基频平均值" : "语速", names_to = "指标", values_to = "Value") |>
+  dplyr::mutate(group_name = factor(group_name),
+                差异类型 = factor(差异类型),
+                指标 = factor(指标))|>
+  as.data.frame()
+
+figbkz <- ggplot(data_bkz, aes(x = 差异类型, y = Value))+
+  geom_half_violin(data = ~ subset(.x, 差异类型 == "组内差异"),
+                   aes(color = 差异类型), size = 1, side = "l", alpha = 0.8)+
+  geom_half_violin(data = ~ subset(.x, 差异类型 == "组间差异"),
+                   aes(color = 差异类型), size = 1, side = "r", alpha = 0.8)+
+  geom_boxplot(aes(color = 差异类型), width = 0.3, size = 1)+
+  geom_line(aes(group = group_name), color = "grey70", linewidth = 0.80)+
+  geom_jitter(aes(color = 差异类型),      # 只用 color
+              alpha = 0.6, size = 3,      # 调整透明度
+              width = 0.02)+              # 不用 pch，默认就是实心点
+  labs(y = "声学参数的差异", x = NULL)+
+  facet_wrap(~ 指标, nrow = 1, scales = "free_y", 
+             labeller = labeller(指标 = c("基频平均值" = "基频",  
+                                          "振幅平均值" = "强度", 
+                                          "语速" = "语速"))) +
+  theme_test()+
+  scale_color_manual(values = c("#D22630", "#3A7D34"))+  # 只保留 color scale
+  theme(axis.text.x = element_text(size = 11, color = "black"),
+        axis.text.y = element_text(size = 10, color = "black"),
+        axis.title.y = element_text(size = 11, color = "black"),
+        axis.ticks.y = element_blank(),
+        strip.text = element_text(size = 11, color = "black"),
+        legend.position = "none", 
+        panel.grid.major = element_line(size = 0.2, color = "#e5e5e5"))
+figbkz
+ggsave("./figbkz.svg", plot = figbkz, width = 6.5, height = 3.5)
+ggsave("./figbkz.png", plot = figbkz, width = 6.5, height = 3.5)
+```
+
+
+```{r}
+data_sd <- data |> dplyr::mutate(across(where(is.numeric), ~ round(.x, 2))) |>
+  pivot_wider(id_cols = c(group_name, "声调"), values_from = "基频平均值" : "语速", 
+              names_from = "差异类型", names_sep = "_") |>
+  dplyr::mutate(声调 = factor(声调, levels = c("全阴平调", "全阳平调", "全去声调", "自然声调")),
+                基频 = 基频平均值_组内差异 - 基频平均值_组间差异,
+                强度 = 振幅平均值_组内差异 - 振幅平均值_组间差异,
+                语速 = 语速_组内差异 - 语速_组间差异)|>
+  dplyr::select(group_name, 声调, 基频, 强度, 语速) |>
+  pivot_longer(cols = "基频":"语速", names_to = "zhibiao", values_to = "Value") |>
+  as.data.frame()
+
+data_sd
+
+figsd <- ggplot(data_sd, aes(x = 声调, y = Value))+
+  geom_boxplot(aes(color = 声调), width = 0.5, size = 1)+
+  labs(y = "声学参数的差异", x = NULL)+
+  facet_wrap(~ zhibiao, nrow = 1, scales = "free_y") +
+  theme_test()+
+  scale_x_discrete(labels = c("阴平", "阳平", "去声", "自然"))+
+  scale_color_manual(values = c("#D22630", "#3A7D34", "#9D6B53", "#4A6FB1"))+  # 只保留 color scale
+  theme(axis.text.x = element_text(size = 11, color = "black"),
+        axis.text.y = element_text(size = 10, color = "black"),
+        axis.title.y = element_text(size = 11, color = "black"),
+        axis.ticks.y = element_blank(),
+        strip.text = element_text(size = 11, color = "black"),
+        legend.position = "none", 
+        panel.grid.major = element_line(size = 0.2, color = "#e5e5e5"))
+figsd
+ggsave("./figsd.svg", plot = figsd, width = 6.5, height = 3.5)
+ggsave("./figsd.png", plot = figsd, width = 6.5, height = 3.5)
+```
+

@@ -1,0 +1,858 @@
+---
+title: "Lecture15：linear model"
+author: "Wenbo Yu"
+date: "2025-12-31"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+  tidyverse,#数据整理必备包
+  ggplot2, #画图必备包
+  bruceR, #各种统计检验的包
+  nortest, #正态分布检验
+  patchwork,#拼图包
+  showtext, #汉字字体包
+  ggsci,#颜色包
+  writexl, #写出excel
+  ggbeeswarm, #蜜蜂图包
+  gghalves, #半幅图包
+  papaja, #主题包
+  coin, #置换检验
+  car #基础的统计包
+)
+options(scipen = 9999) #关闭科学计数法
+```
+
+
+```{r 我们的研究正确吗？}
+knitr::include_graphics('./picture/chongfuxing.jpg')
+```
+
+#############################################################################################
+课程内容
+一 线性回归
+二 再看假设检验(有兴趣自学)
+三 统计功效(有兴趣自学)
+#############################################################################################
+#############################################################################################
+
+一 线性回归的基本问题
+（一）定义：确定两个或两个以上变量间相互依赖的定量关系的一种统计分析方法，具体是通过多组自变量和因变量的样本数据，拟合出最佳的函数关系，#以推断总体#。#主要指的是直线回归#
+```{r 线性模型}
+knitr::include_graphics('./picture/zhixianhuigui.png')
+knitr::include_graphics('./picture/逻辑回归.png')
+plot(population ~ year + I(year^2), data = USPop)
+f1 <- lm(population ~ year + I(year^2), data = USPop)
+```
+
+（二）线性回归的作用（录制视频）
+1. 探索现象/结果的影响主要有哪些：A、B和C因素都可能影响因变量，是不是可以删除一个？在其他因素不变的情况下，影响关系是否仍旧存在？如什么因素影响保研?对比方差分析
+2. 影响因素对现象/结果是怎样影响的：A因素的影响大于B因素，C在有了AB因素后才可以影响因变量，早八还是上早自习能够提升学习效率更多？
+3. 预测未来的现象/结果：用过去五年高考成绩预测保研情况，是不是对新大一的学生还有用？能不能在大一的时候判断谁保研
+（以上内容来自张敬信老师专著）
+
+（三） 回归的假设检验
+1. T检验的假设检验
+样本：南师大汉语言和古文献英语水平的差异
+总体：全中国汉语言和古文献英语水平的差异
+2. 回归的假设检验
+样本：南师大老师课程打分影响学生上课抬头率
+总体：全中国老师课程打分影响学生上课抬头率
+```{r 样本回归和总体回归}
+set.seed(1222)
+#总体数据
+x <- rnorm(1000, mean = 10, sd = 5)
+y <- 2 * x + 1 + rnorm(1000, mean = 2, sd = 8)
+xy <- data.frame(x, y)
+
+#总体回归
+zongti <- ggplot(xy, aes(x, y)) +
+  geom_point(shape = 21, size = 2, colour = "pink") +
+  geom_smooth(colour = "darkred")
+
+#样本（抽样）回归
+for (i in 1:10) {
+  id  <- sample(nrow(xy), 50)
+  xyi <- xy[id, ]
+  zongti <- zongti +
+    geom_point(data = xyi, aes(x, y),
+               shape = 21, size = 2, colour = "#44c1f0", alpha = 0.5) +
+    geom_smooth(data = xyi, aes(x, y), method = "lm",
+                colour = "#3f60aa", se = FALSE, size = 0.3)
+}
+zongti
+```
+
+
+（四）线性模型的求解
+1. 最小二乘法（误差派）：让实际值和模型预测值的总偏离达到最小，从而得到最优的模型参数估计。
+最小二乘法的核心是计算平方和。
+```{r OLS}
+knitr::include_graphics('./picture/zuixiaoercheng.png')
+```
+
+2. 极大似然法（频率派）
+（1）基本逻辑：我们现在抽取到了当前的样本，那么最优模型参数应该让当前样本数据出现的可能性最大。在真实世界中，一组x值对应的y观测值可以看作来自真实y值的一次抽样，因为y值可能受多种因素影响，所以可以假设任意一组x值对应的真实y值是服从正态分布的随机变量。最大似然估计的思想就是找到最优的回归系数，让y观测值出现在概率最大时所对应的回归系数。例如：身高（x）和体重(y)的回归关系中，身高165和170以及173的同学的体重有很多，相当于一个正态分布，那么我抽取到了一个样本（几位同学的身高），我的目标就是找到一条回归直线，使得这几位同学出现的可能性最大。
+```{r MLE:Maximum Likelihood Method}
+knitr::include_graphics('./picture/zuidasiran.png')
+```
+
+
+（2）理解分布：
+因变量是自变量每个水平下的一个分布，所以要假设因变量的分布形态
+要让似然函数最大，即这个样本出现的概率最大
+$$
+y_i \mid x_i \;\sim\;
+\mathcal{N}\!\left(\beta_0 + \beta_1 x_i,\;\sigma^2\right),
+\quad i=1,\dots,n
+$$
+所有y出现的概率为：
+目标就是找到β0、β1和σ，使得似然函数值最大
+$$
+L(\beta_0,\beta_1,\sigma^2)
+= \prod_{i=1}^{n}
+\frac{1}{\sqrt{2\pi}\sigma}
+\exp\!\left[-\frac{\bigl(y_i-(\beta_0+\beta_1 x_i)\bigr)^{2}}{2\sigma^{2}}\right]
+$$
+
+
+二 回归分析的步骤
+```{r 回归模型的步骤}
+knitr::include_graphics('./picture/zongtibuzhou.png')
+```
+
+（一）建立线性模型
+1. 一元线性模型（录制视频）
+$$
+Y = \beta_0 + \beta_1 X + {\color{red}\varepsilon}
+$$
+#######
+y:is the response variable,
+x:is the explanatory variable,
+β1:is the slope of the line, describing how much y #平均changes# when x changes one unit, and β0 is the intercept; the #平均value# y attains when  x = 0（四级全部答错是0分吗？）
+ε:线性模型无法解释的部分，##观测数据和回归模型存在的差异##，可能是随机误差（160身高的人基本都是100斤，有一个人90斤），也可能是其他变量没有考虑
+#######
+
+```{r data visualization}
+noline <- ggplot(mtcars, aes(hp, mpg)) +
+  geom_point()
+noline
+withline <- ggplot(mtcars, aes(hp, mpg)) +
+  geom_point()+
+  geom_smooth(method = "lm")
+withline
+```
+
+
+```{r 建立回归模型}
+m1 <- lm(mpg ~ hp, data = mtcars)
+summary(m1) #模型汇总
+confint(m1) #获取参数的置信区间
+coef(m1) #获取模型的β值
+```
+模型解读：本研究使用hp作为自变量和mpg作为因变量建构回归模型，结果显示hp对mpg有显著的影响，β0 = -0.068, t = -6.742, p < 0.001，表明当自变量每增加一个单位时，因变量减少0.068。同时，模型本身显著，F（1,30） = 45.46，p <- 0.001。决定系数R^2 = 0.602，调整的R^2 = 0.589，从决定系数来看，模型拟合很好。##不需要写β0/截距的结果##
+F检验和T检验，分别对应模型的检验(F-statistic tests the null hypothesis that all model coefficients = 0)和效应值的检验
+
+
+```{r 一元线性模型可视化}
+ggplot(mtcars, aes(x = hp, y = mpg)) +
+      geom_point() +
+      geom_abline(aes(intercept = coef(m1)[1], slope = coef(m1)[2]),
+                colour = "red")
+```
+
+```{r F和t有差异的例子}
+set.seed(42)
+n <- 120
+x1 <- rnorm(n, mean = 10, sd = 2)
+x2 <- rnorm(n, mean = 5,  sd = 1.5)
+x3 <- rnorm(n, mean = 8,  sd = 3)
+# 真实模型：y = 2 + 0.45*x1 + 0.35*x2 + 0.08*x3 + ε
+eps <- rnorm(n, 0, 1.2)
+y <- 2 + 0.45*x1 + 0.35*x2 + 0.08*x3 + eps
+dat <- data.frame(y, x1, x2, x3)
+mod <- lm(y ~ x1 + x2 + x3, data = dat)
+summary(mod)
+tidy(mod) %>% select(term, estimate, std.error, statistic, p.value)
+```
+
+
+2. 如何理解截距
+β0（截距）：当自变量为0的时候，因变量的取值，那么在上面的例子中自变量能为0吗？
+（1）hp是什么？
+（2）怎么让截距有意义？--连续变量的标准化--
+
+```{r 如何标准化}
+b <- c(1, 2, 4, 5)
+b_m <- mean(b) 
+b_sd <- sd(b)
+bb <- (b-b_m)/b_sd
+scale(b)
+```
+
+```{r 标准化后}
+m1_std <- lm(mpg ~ scale(hp, center = T), data = mtcars)
+coef(m1_std)
+coef(m1)
+```
+
+
+mpg = 20.09 + (-4.68)×【scale(hp)】
+(1)当自变量为0的时候，即马力是平均马力的时候，汽车的油耗是20.9
+(2)当自变量增加一个单位的时候，汽车的油耗下降4.68升。
+
+(3)标准化有利于变量间的比较
+###什么影响保研？###
+A：高考成绩（0--750分）
+B：对专业的喜欢程度（1-7评分）
+C：综测成绩（0-20分）
+y = β1×A + β2×B + β3×C + β0  
+三个x的单位不同，它们不好互相比较，不能说明哪个影响大（高考分数范围大，影响也最大）；可以通过对每个变量进行标准化，使得他们每个因素归到自己的单一尺度上，而这个尺度就是Z分数。
+##自变量标准化后，检验结果F值、p值和t值变化马？请用代码进行验证##
+
+```{r 标准化练习：什么影响保研？}
+set.seed(1229)
+gk <- sample(400:750, 60, replace = T)
+xh <- sample(1:7, 60, replace = T)
+zc <- sample(1:20, 60, replace = T)
+by <- sample(60:90, 60, replace = T)
+by.df <- data.frame(gk, xh, zc, by)
+by.lm0 <- lm(by ~ gk + xh + zc, data = by.df)
+coef(by.lm0)
+summary(by.lm0)
+by.lm1 <- lm(by ~ scale(gk) + scale(xh) + scale(zc), data = by.df)
+coef(by.lm1)
+summary(by.lm1)
+```
+
+##标准化的优劣##
+有助于进行变量的比较（我们很关心的），有时候可以更好的理解截距。
+不利于实际意义（自变量增加的不是一个单位，而是增加的一个标准差，基础研究不太关心），
+有的时候不需要标准化也可以理解截距，如入职有了基本工资，英语四级考试有基础成绩
+如果自变量有多个连续变量或一个连续变量+一个以上的分类变量，要将连续变量进行标准化
+
+3. 二元线性模型
+$$
+Y = \beta_0 + \beta_1 X1 + \beta_2 X2
+$$
+$$
+mpg = \beta_0 + \beta_1 × hp + \beta_2 × wt
+$$
+
+
+```{r 马力和车重，油耗}
+m2 <- lm(mpg ~ hp + wt, data = mtcars)
+summary(m2)
+confint(m2) #获取β值的置信区间
+coef(m2) #获取模型的β值
+```
+
+模型解读：本研究使用hp和wt作为自变量和mpg作为因变量建构回归模型，结果显示hp和wt对mpg都有显著的预测性，β1 = -0.032, t = -3.519, p = 0.001；表示当wt不变的时候，hp每增加一个单位，mpg下降0.032个单位；此外，β2 = -3.878, t = -6.129, p < 0.001；表示当hp不变的时候，wt每增加一个单位，mpg下降3.878个单位。同时，模型本身显著，F（2,29） = 69.21，p <- 0.001，说明变量设置和数据拟合良好。决定系数R^2 = 0.867，调整的R^2 = 0.815，从决定系数来看，模型拟合很好。
+
+#中心化、标准化的区别#
+```{r 练习}
+hp_std <- scale(mtcars$hp)
+wt_std <- scale(mtcars$wt)
+m2_std <- lm(mpg ~ hp_std + wt_std, data = mtcars)
+summary(m2_std)
+confint(m2_std) #获取β值的置信区间
+coef(m2_std) #获取模型的β值
+
+hp_cen <- scale(mtcars$hp, scale = FALSE)
+wt_cen <- scale(mtcars$wt, scale = FALSE)
+m2_cen <- lm(mpg ~ hp_cen + wt_cen, data = mtcars)
+summary(m2_cen)
+confint(m2_cen) #获取β值的置信区间
+coef(m2_cen) #获取模型的β值
+```
+
+
+```{r 标准化、未标准化和中心化的比较}
+coef_com <- data.frame(
+  model   = c("original", "standardized", "center"),
+  intercept = c(coef(m2)[1], coef(m2_std)[1], coef(m2_cen)[1]),
+  hp        = c(coef(m2)[2], coef(m2_std)[2], coef(m2_cen)[2]),
+  wt        = c(coef(m2)[3], coef(m2_std)[3], coef(m2_cen)[3]),
+  row.names = NULL)
+coef_com 
+```
+
+一句话总结：
+A：需要比较变量的重要性和解释系数，那么就标准化
+B：需要解释系数，就中心化
+C：需要看显著不显著，不做任何操作
+
+```{r 标准化中心化2}
+set.seed(14)
+shijian <- sample(1:15.5, 20, replace = T)
+eps <- rnorm(length(shijian), 0, 0.6)
+gongzi <- 3 + 0.8 * shijian + eps
+gz.df <- data.frame(shijian, gongzi)
+```
+
+```{r}
+#未标准化和中心化
+m4 <- lm(data = gz.df, gongzi ~ shijian)
+coef(m4)
+summary(m4)
+
+#标准化
+shijian_std <- scale(gz.df$shijian)
+m4_std <- lm(gongzi ~ shijian_std, data = gz.df)
+summary(m4_std)
+confint(m4_std) #获取β值的置信区间
+coef(m4_std) #获取模型的β值
+
+#中心化
+shijian_cen <- scale(gz.df$shijian, scale = FALSE)
+m4_cen <- lm(gongzi ~ shijian_cen, data = gz.df)
+summary(m4_cen)
+confint(m4_cen) #获取β值的置信区间
+coef(m4_cen) #获取模型的β值
+
+coef_com <- data.frame(
+  model   = c("original", "standardized", "center"),
+  intercept = c(coef(m4)[1], coef(m4_std)[1], coef(m4_cen)[1]),
+  hp        = c(coef(m4)[2], coef(m4_std)[2], coef(m4_cen)[2]),
+  row.names = NULL)
+coef_com 
+```
+
+
+
+3. 带有交互作用的线性模型
+$$
+Y = \beta_0 + \beta_1 X1 + \beta_2 X2 + \beta_3 X1:X2
+$$
+$$
+mpg = \beta_0 + \beta_1 × hp + \beta_2 × wt + \beta_3 × hp : wt
+$$
+
+
+```{r 马力和车重，油耗，有交互}
+m3 <- lm(mpg ~ hp + wt + hp : wt, data = mtcars)
+summary(m3)
+confint(m3) #获取系数值的置信区间
+coef(m3) #获取模型的β值
+```
+模型解读
+**
+β0:当β1和β2为0的时候，mpg的值是多少（不存在这种可能，因为hp和wt本身不可能为0）。
+β₁:当wt被控制时，当hp每增加1个单位，mpg平均减小0.012。
+β₂:当hp被控制时，当wt每增加1个单位，mpg平均减小8.22。
+β3:hp对mpg效应随wt的变化而变化，当wt增加时，hp的增加对mpg的影响也是正向的，在考虑hp自身影响的同时（增加-0.12），还要考虑wt的影响(增加0.028)
+F值和R^2解读同上
+##老师也不太会，让我们成为AI主理人把##
+**
+
+```{r 两因素含交互可视化}
+ggplot(mtcars, aes(hp, mpg, colour = cut(wt, 3))) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE, aes(group = cut(wt, 3))) +
+  labs(colour = "wt 分组")
+```
+
+https://www.modernstatisticswithr.com/regression.html#linearmodels2
+#####################################################################################################
+
+（二）回归诊断
+1. 线性假设：自变量和因变量是线性关系（如果不是线性的要转换成线性的）
+2. 随机抽样原则：默认
+3. 无共线性：VIF（方差膨胀因子）：指的是自变量之间存在较强的线性相关性，导致回归系数不稳定，标准误增加，显著性下降，但不会影响模型的拟合度。多重共线性的危害包括使得回归系数不稳定（因为两个变量相关，有一个有变化，另一个也变化，那么对系数影响很大）；残差变大（两个变量相关，类似于一个点，有效样本量下降，导致估计不准），同时也影响对某一个变量独特效应的检验。
+
+$$
+\operatorname{VIF}_j = \frac{1}{1 - R_j^2}\
+$$
+R2是把第j个自变量Xj当作因变量，用其余所有自变量去拟合它得到的决定系数。
+如果R2很大，说明用x(j-1)个自变量拟合xj很好，说明自变量内部很密切，那么VIF就很大
+多重共线性还可以通过相关矩阵来判断；出现多重共线性，可以通过删除自变量、合并相关变量和逐步回归等办法来解决
+```{r VIF的检验}
+#car::vif(m1) #VIF检验要求至少有两个自变量
+car::vif(m2)
+car::vif(m3, type = "predictor")
+```
+VIF equal to 1 = variables are not correlated
+VIF between 1 and 5 = variables are moderately correlated 
+VIF greater than 5 = variables are highly correlated
+
+
+4. 残差正态性/等分散性（非异质性）
+$$
+\varepsilon_i = y_i - \hat{y}_i
+            = y_i - (\beta_0 + \beta_1 x_{i1} + \cdots + \beta_p x_{ip})
+            \;\overset{\text{i.i.d.}}{\sim}\;
+            \mathcal{N}(0,\,\sigma^2)
+$$
+
+
+```{r 残差}
+knitr::include_graphics('./picture/cancha.png')
+```
+如何解决异方差问题：
+（1）使用稳健回归
+（2）对因变量进行转换，如倒数转换、根号转换和log转换以及box-cox转换
+```{r boxcox转换}
+knitr::include_graphics('./picture/box.png')
+```
+
+5. 异常值/强影响点
+（1）outlierTest函数
+```{r 极端值检验}
+car::outlierTest(m2)
+```
+（2）
+```{r 强影响点检验}
+cd <- cooks.distance(m2)
+n <- nobs(m2)#模型2中使用的观测值是多少个
+threshold <- 4/n
+which(cd > threshold)
+cat("模型2中的强影响点分别是：", as.numeric(which(cd > threshold)), "\n")
+```
+
+6. 综合检验
+```{r 回归诊断}
+par(mfrow = c(2, 2)) #四幅图在一个界面显示
+plot(m2)
+par(mfrow = c(1, 1)) #默认一幅图一个界面显示
+```
+##Residualsvs.fitted##: 自变量是否和因变量是线性关系，好的线性关系应该是一条直线（图中结果一般）
+##Normal Q-Q##: 如果点都骑在线上，那么暗示残差是正态分布
+##Scale-Location##: 误差等分散性，残差是否同质
+##Residuals vs. leverage##:横坐标是杠杆值，纵坐标是离群程度，他们结合在一起就是强影响点，意味着这个点对模型系数影响很大
+
+#####################################################################################
+#####################################################################################
+
+（三）模型比较
+对于mpg我们建立了三个模型，哪个模型更好？
+m1:马力
+m2:车重和马力
+m3:车重、马力和它们的交互作用
+```{r 如无必要，勿增实体}
+knitr::include_graphics('./picture/tidao.jpeg')
+```
+
+1. RMSE：均方根误差反映的是预测值与真实值平均偏离多少，是模型性能评估的重要指标。
+越小越好，显示预测值和观测值越接近。
+$$ 
+\mathrm{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^2} 
+$$
+
+```{r RMSE}
+ms <- list(m1, m2, m3)
+modelr::rmse(m3, data = mtcars)
+rmse <- map_dbl(ms, ~ modelr::rmse(.x, data = mtcars))
+rmse
+#RMSE <- sqrt(mean(residuals(m1)^2)) #手动计算
+```
+
+2. 决定系数(R^2)
+```{r 代码}
+cat("m1, m2和m3的决定系数分别是：", summary(m1)$r.square, summary(m2)$r.square, summary(m3)$r.square, "\n")
+```
+A：决定系数反映了自变量能解释的方差占总方差的比值，当大于0.9表明模型拟合非常好，小于0.5值模型拟合不好。
+决定系数可以告诉我们，模型的说服力有多强。比如上面的三个R2都很大，说明自变量的变异能够占据总体变异的比例很大，也可以说你设计的自变量、因变量和数据很吻合。但是**R2没有告诉我们模型对不对**，决定高考成绩的因素有很多，智商、家庭背景和努力程度对高考成绩的影响程度差不多，只有智商做自变量，可以得到不错的R2，但是影响高考成绩的因素还有其他的，模型没有把他们纳入，就是模型不对（理论上）。
+B：随着模型的增加，模型的决定系数会越来越大，比如用高考英语成绩、大一英语成绩、大二英语成绩和喜欢英语程度预测考研英语成绩，决定系数肯定会增加，但是这么多自变量真的好吗？**调整的R2**会根据自变量的数量进行矫正，如果有很多价值不大的纳入了自变量，即使R2很高，调整之后也会下降。
+
+```{r 调整的R2}
+cat("m1, m2和m3的决定系数分别是：", 
+    summary(m1)$adj.r.squared, 
+    summary(m2)$adj.r.squared,
+    summary(m3)$adj.r.squared, "\n")
+```
+
+如果新加的变量有用，调整的R2会增加；
+如果新加的变量是摆设，调整的R2会下降
+R2则永远都是增加不下降，没有惩罚力度
+C:不同学科决定系数差异很大，在语言学领域能达到0.3就很厉害了。
+D:如果模型显著，t值也显著，但是R2很小，说明什么？
+
+3. AIC & BIC
+##数值越小，模型质量越高##
+$$
+\begin{aligned}
+\mathrm{AIC} &= -2\,\ell(\hat{\theta}) + 2k, \\
+\mathrm{BIC} &= -2\,\ell(\hat{\theta}) + k\ln(n),
+\end{aligned}
+$$
+AIC:用于衡量统计模型的拟合优度，同时也考虑了模型的复杂性。
+k是模型参数的数量，L是模型的似然函数值。
+BIC:用于评估模型的拟合优度，但相比AIC，它对模型复杂性的惩罚更重。
+n是样本量,k是模型参数的数量，L是模型的似然函数值。
+ln(n)往往大于3，所以BIC的值容易大于AIC，因此BIC的标准更加严格
+
+```{r AIC BIC}
+ms <- list(m1, m2, m3)
+AIC(m1)
+map_dbl(ms, AIC)
+map_dbl(ms, BIC)
+```
+
+4. Anova
+```{r 方差分析检验}
+m1 <- lm(mpg ~ hp , data = mtcars)
+m2 <- lm(mpg ~ hp + wt, data = mtcars)
+m3 <- lm(mpg ~ hp + wt + hp : wt, data = mtcars)
+anova(m1, m2, m3)
+```
+和模型m1相比，m2和m3都有显著提升，说明两个模型都更好。
+既然要找到预测mpg效率最高的自变量，那么就要综合对比几个指标
+
+```{r model comparison}
+m_compare <- data.frame(
+  Model = c("m1", "m2", "m3"),
+  AIC = c(map_dbl(ms, AIC)),
+  BIC = c(map_dbl(ms, BIC)),
+  RMSE = rmse
+)
+print(m_compare)
+```
+
+
+（四）练习
+使用企鹅数据进行多个自变量的线性模型练习
+如利用体重、身高预测scontrol的平均值或者stress的平均值
+```{r data for linear model}
+lmdata <- bruceR::import("./penguin_rawdata_full.csv")
+
+#建立模型
+lmdata <- lmdata |>
+  dplyr::mutate(scon.mean = rowMeans(pick(starts_with("scontrol"))),
+                stre.mean = rowMeans(pick(starts_with("stress"))))|>
+  dplyr::select(Site, scon.mean, stre.mean, heightm, weightkg)
+
+formula <- list(M1 = weightkg ~ scon.mean + stre.mean,
+                M2 = weightkg ~ scon.mean + heightm,
+                M3 = weightkg ~ heightm + stre.mean)
+
+result.list <- purrr::map(formula, ~ lm(.x, data = lmdata))
+
+M1 <- result.list$M1
+M2 <- result.list$M2
+M3 <- result.list$M3
+
+#模型诊断(可能有一些模型不通过，就可以排除或者修正)
+par(mfrow = c(2, 2)) #四幅图在一个界面显示
+M1.plot <- plot(M1)
+M2.plot <- plot(M2)
+M3.plot <- plot(M3)
+par(mfrow = c(1, 1))
+
+#模型比较
+model.compare.function <- function(x){
+  model_name <- deparse(substitute(x))
+  R2 <- summary(x)$r.squared
+  R2.ad <- summary(x)$adj.r.squared
+  RMSE <- sqrt(mean(residuals(x)^2))
+  AIC <- AIC(x)
+  BIC <- BIC(x)
+  mod.sum <- data.frame(model_name, R2, R2.ad, RMSE, AIC, BIC)
+}
+purrr::map_dfr(result.list, ~ model.compare.function(.x))
+```
+
+```{r model1 answer}
+model.1 <- lm( weightkg ~ scon.mean + stre.mean, data = lmdata)
+summary(model.1)
+AIC(model.1)
+BIC(model.1)
+rmse.m1 <- modelr::rmse(model.1, data = lmdata)
+par(mfrow = c(2, 2)) #四幅图在一个界面显示
+model1.plot <- plot(model.1)
+par(mfrow = c(1, 1))
+```
+
+
+（五） 预测新的数据
+用m2和m3预测新的数据
+```{r predicted}
+hp <- rnorm(20, 100, 15)
+wt <- rnorm(20, 4, 2)
+new <- data.frame(hp, wt)
+new <- new |> dplyr::mutate(pred.m2 = predict(m2, newdata = new),
+                            pred.m3 = predict(m3, newdata = new))
+new
+```
+
+
+```{r 回归模型的步骤}
+knitr::include_graphics('./picture/zongtibuzhou.png')
+```
+
+######################################################################################################
+#########################################后面大家自愿看看吧###########################################
+######################################################################################################
+
+二 再看假设检验
+（一）思路
+1.提出零假设，明确α水平
+2.计算统计量
+3.得到统计指标，计算p值
+4.推翻零假设，得出显著的结论
+
+```{r 核酸检验}
+knitr::include_graphics('./picture/hesuan.png')
+```
+(二)根据假设检验，核酸检测的步骤：
+（1）这个人没有感染（零假设），相应细胞和微生物的浓度就是1000，α水平为0.0001
+（2）如果这次抽样，抽取的唾液中细胞都浓度为1099，计算相应的统计检验量F或者t
+（3）发现统计检验量落在了显著性水平范围内。
+（4）小概率事件（α）发生了，那么零假设（这个人没有感染）不对，所以这个人感染了。
+
+如果抽样浓度是1002，落在了显著性区间里面，那么是α/β错误？
+如果抽样浓度是××××，没有落在显著性区间里面？能说就没有感染吗？
+######
+p值是怎么定义来着？
+######
+
+（二）p值理解的误区
+1. 以为p值可以*直接*证明差异或效果的存在。
+零假设 (H₀)：被告是无罪的。
+备择假设 (H₁)：被告*不是无罪*的。
+p值：在假设被告完全无罪的前提下，我们观察到现有（甚至更极端）证据的概率。
+如果p值很小（比如 p < 0.05），就像在法庭上找到了非常有力的间接证据（例如，在被告人家中发现了凶器）。这个证据的出现，在“被告无罪”这个前提下是非常不可能的。
+```{r 显著}
+knitr::include_graphics('./picture/xianzhu.png')
+```
+
+2. p值没有计算H0假设是真的可能性，所以不能说H0是对的
+p值的计算完全是在“零假设完全正确”这个前提下进行的。它回答的问题是：“如果H₀是真的，那么我观察到当前数据（或更极端数据）的概率是多少？”
+所以：
+（1）它不计算“零假设为真的概率”。
+（2）它不衡量“备择假设为真的概率”。
+ 它没有直接证明他犯罪或者不犯罪，只是让“他没有犯罪”这个说法变得非常可疑。
+
+```{r 不显著}
+knitr::include_graphics('./picture/buxianzhu.png')
+```
+
+3. “不拒绝”不等于“接受”：
+当p值较大（比如 p > 0.05）时，我们只能说“未能拒绝零假设”，而**不能说“接受零假设”或“零假设正确”。
+原因A：证据不足：p值大可能仅仅意味着你的数据不够有力，或者样本量太小，无法检测到真实的效应。这就像调查不足，证据无力，无法定罪，但绝不意味着被告就一定是清白的。可能只是证据没有被发现。
+原因B：可能存在其他假设：数据可能与零假设兼容，但也可能与其他你从未考虑过的假设兼容。
+混淆P(数据 | 假设) 和 P(假设 | 数据)：
+**p值 = P(观察到的数据或更极端数据 | H₀ 为真）
+
+而我们真正想知道的往往是：
+P(H₀ 为真 | 观察到的数据）
+P(数据 | 假设)：在已知假设为真的条件下，得到数据的概率。（这是p值）
+P(假设 | 数据)：这是在给定数据条件下，假设为真的概率。要计算这个概率，需要使用贝叶斯统计的方法，考虑先验概率。
+
+例如，去医院看胃癌，结果阳性，即p值是显著的。
+p值的思考：*假设*你没有胃癌，也就是某个癌细胞的比例和100差异不显著，但是经过抽样获得了*数据*，发现显著了，那么推翻了假设，即如果没有胃癌，你不太可能得到这样的检测结果，所以你不太可能是一个正常人。
+**但这还是和你得胃癌的概率不是一个含义**
+贝叶斯思考：中国人得胃癌的可能性（假设是0.01），得到你的检验结果（数据），结合之前的假设推断出你得胃癌的可能性。
+
+（三）p-hacking的误区
+1. 定义：p值操纵指的是研究者在研究过程中，采用不合理的手段来达到统计上的显著，例如条件性选择样本、选择性报告数据或采用多个小样本研究而避免进行一个大样本实验。
+2. 最常见的是条件性选择样本，即**做到显著为止**
+不根据统计检验力的方法来计算样本量，而是收集数据的同时对数据进行分析，根据当前结果是否显著来决定是否停止收集数据。
+（1）从公式来看
+$$t = \frac{\bar{X} - \mu}{s / \sqrt{n}}$$
+$$t = \frac{\bar{X}_1 - \bar{X}_2}{\sqrt{\frac{s_1^2}{n_1} + \frac{s_2^2}{n_2}}}$$
+
+
+（2）从数据模拟来看
+```{r p值、d值和样本量之间的关系：简单模拟}
+set.seed(12.13)
+#第一次抽样，n=15
+a10 <- rnorm(15, mean = 10, sd = 3) #抽样
+a11 <- rnorm(15, mean = 11, sd = 5)
+data1 <- data.frame("shuju1" = c(a10, a11),
+                    "bianliang" = c(rep("A",15), rep("B", 15))) #合成数据框
+data_t <- bruceR::TTEST(data = data1, x = "bianliang", y = "shuju1") #检验
+p1 <- data_t$pval #提取p值
+
+#第二次抽样，n=30
+a10 <- rnorm(30, mean = 10, sd = 3)
+a11 <- rnorm(30, mean = 11, sd = 5)
+data1 <- data.frame("shuju1" = c(a10, a11),
+                    "bianliang" = c(rep("A",30), rep("B", 30)))
+data_t <- bruceR::TTEST(data = data1, x = "bianliang", y = "shuju1")
+p2 <- data_t$pval
+
+#第三次抽样，n=60
+a10 <- rnorm(60, mean = 10, sd = 3)
+a11 <- rnorm(60, mean = 11, sd = 5)
+data1 <- data.frame("shuju1" = c(a10, a11),
+                    "bianliang" = c(rep("A",60), rep("B", 60)))
+data_t <- bruceR::TTEST(data = data1, x = "bianliang", y = "shuju1")
+p3 <- data_t$pval
+
+#第四次抽样，n=80
+a10 <- rnorm(90, mean = 10, sd = 3)
+a11 <- rnorm(90, mean = 11, sd = 5)
+data1 <- data.frame("shuju1" = c(a10, a11),
+                    "bianliang" = c(rep("A",90), rep("B", 90)))
+data_t <- bruceR::TTEST(data = data1, x = "bianliang", y = "shuju1")
+p4 <- data_t$pval
+
+#第五次抽样，n=500
+a10 <- rnorm(500, mean = 10, sd = 3)
+a11 <- rnorm(500, mean = 11, sd = 5)
+data1 <- data.frame("shuju1" = c(a10, a11),
+                    "bianliang" = c(rep("A",500), rep("B", 500)))
+data_t <- bruceR::TTEST(data = data1, x = "bianliang", y = "shuju1")
+p5 <- data_t$pval
+
+p_n <- data.frame(chouyang = c(1:5), p = c(p1, p2, p3, p4, p5), 
+                  yangbenliang = c("n = 15", "n = 30", "n = 60", "n = 90", "n 500"))
+
+p_n
+```
+
+随着样本量的增加，p值越来越可能显著，效应量变化不明显（效应量和样本量没关系）
+```{r p值、d值和样本量之间的关系:复杂模拟}
+#需要运行两分钟
+set.seed((12.13))
+#设置种子点
+p <- c();q <- c()
+#建立一个空的向量，用于存储p值
+#m是从11到500的依次抽取，分别形成平均数是10和11的两个向量
+for (m in 11:500){
+a <- rnorm(m, 10, 3); b <- rnorm(m, 11, 5)
+#向量合并程数据框，自变量是A和B，因变量是数据
+data <- data.frame("shuju" = c(a, b),
+                   "bianliang" = c(rep("A", m), rep("B", m)))
+#对数据框进行T检验，存储p值，由于m从11开始，所以减去10
+ab_t <- bruceR::TTEST(data = data, x = "bianliang", y = "shuju")
+  p[m-10] <- ab_t$pval
+  q[m-10] <- ab_t$Cohen_d
+}
+#p值保留三位小数，作为纵坐标，生成一个横坐标，画图
+#y1(黑色) = p值，y2（红色） = d值 
+p_df <- data.frame(y1 = round(p,3), y2 = round(q,3), x = 1 : 490)
+pic <-ggplot(data = p_df)+
+  geom_point(aes(x = x, y = y1))+
+  geom_point(aes(x = x, y = y2), color = "darkred")
+pic
+```
+
+
+```{r 来自微信微信推送的模拟}
+n <- seq(10, 2000, by = 50)
+# 计算不同样本之下t检验所得出的p值
+p_values <- sapply(n, function(i) {
+  group1 <- rnorm(i, mean = 10, sd = 5)
+  group2 <- rnorm(i, mean = 11, sd = 5)
+  t.test(group1, group2)$p.value
+})
+
+# 作图
+ggplot(data = data.frame(n, p_values), aes(x = n, y = p_values)) +
+  geom_jitter(size = 2, shape = 1) +
+  xlab("Sample Size") +
+  ylab("P-value") +
+  ggtitle("Relationship between Sample Size and P values") +
+  theme_classic() + 
+  geom_smooth(linewidth = 0.5) + 
+  geom_hline(yintercept = 0.05, color = "red") + 
+  scale_y_continuous(breaks = c(0, 0.05, 0.2, 0.4, 0.6, 0.8))
+```
+
+3. 选择性报告数据：选择性报告因变量和自变量；或为了得到显著的结果，而排除数据。
+4. 选择多个小样本：会使得统计效力较低，使得效应膨胀。
+##########################################################################################
+
+
+三 统计功效
+1. 统计功效的概念
+有这样一个问题，我们旨在探究动物性别与被困于陷阱中的应激反应之间是否存在关联。我们可采用双样本t检验来检验两性间激素水平无差异的零假设，若与样本数据关联的p值小于0.05，则拒绝该零假设。假设在总体层面上，性别确实存在效应，且通常雌性个体的应激反应更强。
+若根据样本计算得出的p值小于0.05，则说明我们在研究中成功捕捉到了这一效应。然而，若后续重复研究时未能拒绝零假设，则我们犯了II类错误（即当零假设实际不成立时未能拒绝它，也叫做β错误）。类似于，你家着火了，但是报警器没有报警；你中了彩票，但是彩票中心没有联系你，……
+统计功效（1-β）可理解为：在假设的重复研究中，能够避免犯II类错误的样本所占的比例。
+类似于，报警器能不能准确发现火情，彩票中心能不能准确识别有人中奖，雷达能否准确报告敌情，……
+
+如果说α错误是本身和总体没有差异，而报告了差异，那么β错误就是本身有差异而没有报告有差异，相应的统计功效就是避免β错误的能力。
+
+2. 两类错误
+```{r two_type_error}
+knitr::include_graphics('./picture/two_type_error.jpg')
+```
+https://rpsychologist.com/d3/nhst/
+
+α错误：
+β错误：
+1-α：
+1-β：
+power越大，d值越大：
+***
+思考：
+我们希望统计功效高好还是统计功效低好？为什么？
+***
+A failure to reject the null hypothesis of no effect may be the result of low statistical power when an important effect actually exists and the null hypothesis of no effect is in fact false (Hoeng & Heisey, 2001).
+https://zhuanlan.zhihu.com/p/149941019
+
+
+3. 如何计算统计功效
+（1）通过软件Gpower
+（2）通过R包
+(3)通过模拟
+https://jonesor.github.io/BB852_Book/power-analysis-by-simulation.html
+人类蛋白质摄入m = 12, sd = 3
+一个医学实验人数有限，只有20个人，实验设置了1.2倍的蛋白质，sd = 3
+```{r indep ttest sample set}
+#完成一次运算
+control <- rnorm(n = 10, mean = 12, sd = 3)
+treatment <- rnorm(n = 10, mean = 14.4, sd = 3)
+res <- t.test(control, treatment)
+res
+res$p.value
+
+# 开始模拟，设置基本参数
+controlMean <- 12
+treatmentMean <- 14.4
+sdValue <- 3
+sampleSize <- 10
+
+#先做一个少量的模拟
+replicate(5, t.test(
+  rnorm(sampleSize, controlMean, sdValue),
+  rnorm(sampleSize, treatmentMean, sdValue)
+)$p.value)
+
+#做一个大量的模拟
+powerResults <- replicate(1000, t.test(
+  rnorm(sampleSize, controlMean, sdValue),
+  rnorm(sampleSize, treatmentMean, sdValue)
+)$p.value)
+
+#计算power
+sum(powerResults < 0.05)
+```
+
+
+```{r relation between power n and d}
+# Set up a data frame for the simulation results
+simulData <- data.frame(sampleSize = 5:40)
+
+# Set basic values
+controlMean <- 12
+treatmentMean <- 14.4
+sdValue <- 3
+
+# Function to do the t-test
+pwr <- function(n) {
+  sum(replicate(
+    1000,
+    t.test(
+      rnorm(n, controlMean, sdValue),
+      rnorm(n, treatmentMean, sdValue)
+    )$p.value
+  ) < 0.05) / 1000
+}
+
+# map_dbl applying the function for every value of
+# simulData$sampleSize
+simulData$Power <- purrr::map_dbl(simulData$sampleSize, pwr)
+
+ggplot(simulData, aes(x = sampleSize, y = Power)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.8, linetype = "dashed")
+```
+
+刚才的模拟中，我们的效应量是固定的（1.2倍），当样本量很少的时候，power也很小，意味着对于小样本来说，我们经常无法检验出两个总体有差异。常规来看，power要达到0.8。
+
+
+

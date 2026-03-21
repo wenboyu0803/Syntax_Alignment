@@ -1,0 +1,617 @@
+---
+title: "Lecture14: Anova and small sample size test"
+author: "author"
+date: "2025-12-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+  tidyverse,#数据整理必备包
+  ggplot2, #画图必备包
+  bruceR, #各种统计检验的包
+  nortest, #正态分布检验
+  patchwork,#拼图包
+  showtext, #汉字字体包
+  ggsci,#颜色包
+  writexl, #写出excel
+  ggbeeswarm, #蜜蜂图包
+  gghalves, #半幅图包
+  papaja, #主题包
+  coin, #置换检验
+  simpleboot,#bootstrap
+  boot #bootstrap
+)
+options(scipen = 9999) #关闭科学计数法
+```
+
+
+课程回归
+1. 单因素方差分析（事后检验和多重比较矫正）
+2. 多因素方差分析（如何理解交互作用）
+
+课程内容：
+1. 两因素混合设计的方差分析
+2. 为什么不要做三因素方差分析的实验
+3. 方差分析的前提
+4. 小样本研究
+
+##################################################################################
+一. 两因素混合实验设计方差分析(录制小视频)
+（一）代码
+```{r mixed 2 * 2}
+df.0 <- import("./hebing.csv")
+df.0 # 性别和group是被试间变量，INI和END是被试内变量，只选择一个被试内变量
+df.mix <- df.0 %>%
+  dplyr::select(-Chinese.Level)%>%
+  group_by(subject, sex, Ini.pro)%>%
+  summarise(mean.rt = mean(RT))%>%
+  ungroup()
+df.mix #查看数据
+mix.ano <- bruceR::MANOVA(data = df.mix, 
+                          dv = "mean.rt", 
+                          between = "sex",
+                          within = "Ini.pro", 
+                          subID = "subject")
+###默认交互作用显著，完成简单效应分析
+P_sex_com <-emmeans(mix.ano, ~ sex | Ini.pro, 
+                    data = df.mix, contr= "pairwise")
+
+S_pro_com <-emmeans(mix.ano, ~ Ini.pro | sex, 
+                    data = df.mix, contr= "pairwise")
+```
+
+（二）结果报告
+本研究在R语言（4.5.1）对数据进行分析。两因素混合方差分析使用bruceR包中的函数进行分析，结果发现性别主效应不显著（F（1，4）= 0.85，p = 0.41），目标词第一个词素主效应不显著（F(1,4) = 1.08, p = 0.36），但是交互作用显著(F(1,4) = 0.02, p = 0.89)。交互作用显著后，我们进行了简单效应分析，首先，在目标词词素为高的条件下，男女被试的反应时间差异不显著，t(4) = 1.13, p = 0.32,在目标词词素为低的条件下，男女被试的反应时间差异不显著，t(4) = 1.13, p = 0.32。其次，在男性被试组中，被试在两种概率条件下反应时间差异不显著，t(4) = -0.84, p = 0.45；另外，在女性被试组中，被试在两种概率条件下反应时间差异不显著，t(4) = -0.63, p = 0.56。
+
+如果交互作用显著了，应该如何解释？
+注意：小数点全文统一，小数点前面的零可以省略。
+
+###################################################################################
+
+二. 为什么不要进行三因素的方差分析
+
+对于被试间A(2)×B(2)×C(3)的实验设计，有多少效应？
+1. 主效应三个，分别对应一个事后检验
+2. 二阶交互作用有三个，分别对应一个简单效应分析
+（1）AB：在A1水平上，B因素的两个水平差异显著，但是在A2水平上，B因素的两个水平差异不显著。
+（2）BC：在B1水平上，C因素的三个水平差异显著，但是在B2水平上，C因素的三个水平差异不显著。
+（3）AC：在××水平上，×因素的×个水平差异显著，但是在××水平上，×因素的×个水平差异不显著。
+3. 三阶交互作用有一个，对应多种简单效应分析
+（1）为什么在A因素的两个水平上，BC因素的交互作用会有显著和不显著的区别。
+*或者*
+（2）为什么在B因素的两个水平上，AC因素的交互作用会有显著和不显著的区别。
+*或者*
+（3）为什么在C因素的三个水平上，AB因素的交互作用会有显著和不显著的区别。
+
+
+```{r 三因素数据准备}
+set.seed(123)
+# 生成被试间变量组合（4种组合：B1C1/B1C2/B2C1/B2C2）
+between_combinations <- expand.grid(
+  between_var1 = factor(c("B1", "B2")),
+  between_var2 = factor(c("C1", "C2"))
+)
+# 参数设置
+n_subjects_per_group <- 15  # 每个组合15名被试
+total_subjects <- nrow(between_combinations) * n_subjects_per_group  # 60名被试
+n_within_levels <- 3  # 被试内变量3个水平
+# 生成被试ID（每个被试完成3次测量）
+subject_ids <- rep(1:total_subjects, each = n_within_levels)
+# 创建完整数据框（180行）
+data <- data.frame(
+  subject_id = subject_ids,
+  within_var = factor(rep(c("A1", "A2", "A3"), times = total_subjects)),
+  between_var1 = factor(rep(between_combinations$between_var1, 
+                          each = n_subjects_per_group * n_within_levels)),
+  between_var2 = factor(rep(between_combinations$between_var2, 
+                          each = n_subjects_per_group * n_within_levels))
+)
+# 添加交互效应和基础值
+base_effect <- 50
+data$dv <- base_effect +
+  # 主效应
+  ifelse(data$between_var1 == "B1", 8, 0) +
+  ifelse(data$between_var2 == "C1", 6, 0) +
+  # 二阶交互
+  ifelse(data$between_var1 == "B1" & data$between_var2 == "C1", 12, 0) +
+  # 三阶交互（仅A3+B1+C1时激活）
+  ifelse(data$within_var == "A3" & 
+         data$between_var1 == "B1" & 
+         data$between_var2 == "C1", 25, 0) +
+  # 随机误差
+  rnorm(nrow(data), mean = 0, sd = 5)
+data
+```
+
+```{r 方差分析+事后检验}
+mix.3fac <- bruceR::MANOVA(
+  data = data,
+  dv = "dv",
+  between = c("between_var1", "between_var2"),
+  within = "within_var",
+  subID = "subject_id")
+
+#被试内变量是三个水平，做事后检验
+bruceR::EMMEANS(mix.3fac ,
+                effect = "within_var",
+                contrast = "pairwise",
+                p.adjust = "bonferroni")
+
+##AB的交互作用
+AB.inter1 <- bruceR::EMMEANS(mix.3fac,
+                             effect = "within_var", 
+                             by = "between_var1",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+AB.inter2 <- bruceR::EMMEANS(mix.3fac,
+                             effect = "between_var1",
+                             by = "within_var",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+
+##AC的交互作用
+AC.inter1 <- bruceR::EMMEANS(mix.3fac,
+                             effect = "within_var", 
+                             by = "between_var2",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+
+AC.inter2 <- bruceR::EMMEANS(mix.3fac,
+                             effect = "between_var2",
+                             by = "within_var",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+
+##BC的交互作用
+BC.inter1 <- bruceR::EMMEANS(mix.3fac,
+                             effect = "between_var1", 
+                             by = "between_var2",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+
+BC.inter2 <- bruceR::EMMEANS(mix.3fac,
+                             effect = "between_var2",
+                             by = "between_var1",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+```
+
+
+
+
+```{r}
+##ABC的交互作用
+ABC.inter1 <- bruceR::EMMEANS(mix.3fac,
+                              effect = c("between_var2", "between_var1"),
+                              by = "within_var",
+                              contrast = "pairwise",
+                              p.adjust = "bonferroni")
+```
+
+
+结果报告：采用……进行数据分析，对于被试内变量进行球星检验，使用……进行矫正；在事后比较中当比较的数量超过两个水平时使用了bonferroni进行矫正。首先三因素方差分析结果显示，（1）……结果显著，F=……，p=……，偏η2=……，（2）……结果显著，F=……，p=……，偏η2=……，（3）……结果显著，F=……，p=……，偏η2=……；对被试内变量进行事后检验，发现A2水平和A1水平差异不显著，t………………，A1和A3水平差异显著，…………，A2和A3水平差异显著，…………。
+本研究还发现交互作用显著，具体来看有三个二阶交互作用显著。分别是被试内因素A和被试间因素B，F…………，被试内因素A和被试间因素C，F…………，以及被试间因素B和C，F…………。此外，三阶交互作用也显著，F…………。
+随后分别对交互作用进行简单效应分析，对于AB的交互作用，…………，对于BC的交互作用，…………，对于AC的交互作用，…………；对于ABC的交互作用进行检验，发现在A1水平下，……的差异达到显著，在A2书评下，……的差异未达到显著。（后面略）。
+
+```{r}
+mix.1.lm <- lm(data = data, dv ~ between_var1 * between_var2 * within_var)
+effects::effect("between_var1 * between_var2 * within_var", mix.1.lm ) %>% plot()
+
+ggplot(data, aes(x = between_var1, y = dv, fill = between_var2)) +
+  geom_col(position = position_dodge(0.8), width = 0.7) +
+  #geom_errorbar(aes(ymin = emmean - SE, ymax = emmean + SE), position = position_dodge(0.8), width = 0.2) +
+  facet_wrap(~ within_var) +
+  theme_minimal()
+```
+
+
+**如何解释：**
+在A1和A2水平下，B1C1、B2C1、B1C2和B2C2四个水平的平均值是……，孰高孰低，关系是什么，说明什么，为什么；但是在A3水平下，B1C1、B2C1、B1C2和B2C2四个水平的平均值是……，孰高孰低，关系是什么；**在这一水平下的结果和A1水平下有明显的区别，这说明了什么， 为什么。**
+
+
+##################################################################################
+
+三. 方差分析的前提
+1. 总体呈正态：一般是默认的，偶尔需要检验
+```{r 正态性检验1（显著性）}
+shapiro_result <- shapiro.test(df.mix$mean.rt) #小样本特别敏感，推荐
+print(shapiro_result)
+
+ks.test(df.mix$mean.rt, 'pnorm') #进行正态性检验
+
+df.mix$mean.rt1 <- log(df.mix$mean.rt) #log转换
+ks.test(df.mix$mean.rt1, 'pnorm')
+
+df.mix$mean.rt.2 <- sqrt(df.mix$mean.rt) #平方根转换，可能要+0.5
+ks.test(df.mix$mean.rt.2, 'pnorm') #验证
+
+df.mix$mean.rt.3 <- 1/df.mix$mean.rt #倒数转换
+ks.test(df.mix$mean.rt.3, 'pnorm') #验证
+```
+
+```{r 正态性检验2（可视化）}
+qqnorm(df.mix$mean.rt)
+qqline(df.mix$mean.rt) #两行代码同时运行
+
+#如果点都落在线上，或者在线的上下，就认为是正态分布
+qqnorm(df.mix$mean.rt1)
+qqline(df.mix$mean.rt1)
+```
+
+2. 试次的相互独立
+3. 方差齐性检验和球形检验
+##################################################################################
+
+```{r lianxi}
+set.seed(123)
+n_subjects <- 30  # 30名被试
+data <- expand.grid(
+  subject = factor(1:n_subjects),
+  factor_A = factor(c("A1", "A2")),
+  factor_B = factor(c("B1", "B2", "B3"))
+)
+# 添加因变量（模拟反应时数据，单位：毫秒）
+# 因子A有两个水平，因子B有三个水平
+data$RT <- rnorm(nrow(data), 
+                  mean = 500 + 
+                    as.numeric(data$factor_A) * 50 + 
+                    as.numeric(data$factor_B) * 30,
+                  sd = 80)
+
+# 添加一些真实的效应模式
+data <- data %>%
+  mutate(
+    RT = case_when(
+      factor_A == "A1" & factor_B == "B1" ~ RT + rnorm(n(), 20, 10),
+      factor_A == "A2" & factor_B == "B3" ~ RT - 40,
+      TRUE ~ RT
+    )
+  )
+
+anov.lx <- bruceR::MANOVA(
+  data = data,
+  dv = "RT",
+  within = c("factor_A", "factor_B"),
+  subID = "subject")
+
+bruceR::EMMEANS(anov.lx,
+                effect = "factor_A",
+                contrast = "pairwise",
+                p.adjust = "bonferroni")
+
+bruceR::EMMEANS(anov.lx,
+                effect = "factor_B",
+                contrast = "pairwise",
+                p.adjust = "bonferroni")
+
+##AB的交互作用
+AB.inter1 <- bruceR::EMMEANS(anov.lx,
+                             effect = "factor_A", 
+                             by = "factor_B",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+
+AB.inter2 <- bruceR::EMMEANS(anov.lx,
+                             effect = "factor_B",
+                             by = "factor_A",
+                             contrast = "pairwise", 
+                             p.adjust = "bonferroni")
+```
+
+结果：
+
+
+
+四 小样本统计分析
+（一）小样本的问题
+1 不具备代表性：中国大学生平均身高，
+“2023年，我国各种形式的高等教育在学总规模4763.19万人”
+如果只抽取300个人，恰好都是黑龙江地区的，那么偏差会很大。
+2 数据展示的时候使用点图或者柱状图会掩盖数据的特点：数据信息量和数据信息内容的权衡
+3 无法进行统计检验
+（1）总体不知道，n > 30，可以使用中心极限定理，进行T检验
+（2）总体正态，n < 30，也可以使用中心基线定理，进行T检验
+（3）如果只有10个被试，而且存在一定的极端情况，怎么办？郝老师梁老师今年的硕士都只有 < 5个被试
+
+（二）非参数检验
+1. 特点
+（1）不需要严格的前提假设
+（2）适合于顺序数据（如排名）
+（3）适合于小样本
+（4）对数据信息的利用较低、检验效能较低
+2. 常见的非参数检验
+```{r}
+knitr::include_graphics('./picture/feicanshu.png')
+```
+
+（三）置换检验（小视频）
+1. 定义：对总体分布情况无要求，特别适用于总体分布未知的小样本数据，即使样本数据小到无法使用t检验。
+2. 特点
+（1）无放回的抽样，适合被试间设计，##什么叫无放回的？##，##为什么不适合被试内设计？##
+（2）适合小样本和大样本，适合所有统计检验（是一种思想）
+
+3. 实例1
+比较AB班级语文成绩差异是否显著(来自于张光耀的知乎文章)
+```{r real difference}
+A = c(89, 88, 90, 94, 85)
+B = c(88, 87, 90, 85, 86, 83)
+DIFF = mean(A) - mean(B)
+cat("两个班级的真实差异是", DIFF, "\n")
+```
+
+```{r null distribution}
+DIFF_null = numeric(length = 10000)
+set.seed(1234)
+for(i in 1:10000){
+  Aidx = sample(1:11, 5)
+  A_permutation = c(A, B)[Aidx]
+  B_permutation = c(A, B)[-Aidx] #体现了无放回
+  DIFF_null[i] = mean(A_permutation) - mean(B_permutation)
+}
+p = min(mean(DIFF_null > DIFF), mean(DIFF_null < DIFF))*2
+print(p)
+cat("在零分布中（两个班级没有显著差异），得到比真实差异", DIFF, "大或小的可能性为", p, "\n")
+```
+由于p > 0.05，因此AB班级差异不显著。
+p值得含义是什么来着？
+
+```{r visualization}
+diff.null <- as.data.frame(DIFF_null)
+colnames(diff.null) <- "diff.mean"
+fig.per <- ggplot(data = diff.null, aes(x = diff.mean)) +
+  geom_density(fill = "lightblue", alpha = 0.5) +
+  geom_vline(xintercept = DIFF, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Permutation Test: Distribution of Mean Differences",
+       x = "Difference in Means (A - B)",
+       y = "Density") +
+  theme_minimal()
+fig.per
+```
+
+4. 置换检验的思路
+https://zhuanlan.zhihu.com/p/28702049338
+如果我们假设两组数据之间没有差异，那么我们可以通过不断“洗牌”，也就是随机打乱这些数据的标签，模拟在没有真实差异的情况下两组数据的表现会是什么样子，然后看随机的结果是否与原始结果相似，这样一来，我们就可以评估原始数据之间的差异是否显著。
+(1)
+(2)
+(3)
+(4)
+
+5. 实例2
+```{r 手动计算}
+set.seed(1128)
+a <- rnorm(6, 5, 1) |> round(3)
+b <- rnorm(6, 7, 1) |> round(3)
+df.ab <- data.frame(x = factor(rep(c("a", "b"), each = 6)), y = c(a, b))
+real.diff.ab <- mean(a) - mean(b)
+
+per.fun <- function(DF, n_per) {
+  results <- numeric(n_per)
+  for (i in 1:n_per) {
+    dif.null <- DF |>
+      dplyr::mutate(y_per = sample(y, replace = FALSE)) |>
+      group_by(x) |>
+      summarise(mean_per = mean(y_per)) |>
+      ungroup() |>
+      summarise(diff = mean_per[1] - mean_per[2]) |>
+      pull(diff)
+    results[i] <- dif.null
+  }
+  extreme_cases <- sum(abs(results) >= abs(real.diff.ab))
+  p_value <- (extreme_cases + 1) / (n_per + 1) #体现p值的含义，当前数据或更极端数据
+  return(list(p_value = p_value,
+              Real_diff = real.diff.ab,
+              Permutation_Results = results
+              )
+         )
+}
+
+per.result <- per.fun(df.ab, 1000)
+per.result$p_value
+cat("在零分布中（ab两组没有差异），得到比真实差异",
+    real.diff.ab,
+    "更极端的可能性为",
+    per.result$p_value,
+    "\n")
+```
+
+
+###思想很简单，但是做法很难，那怎么办？###
+```{r}
+knitr::include_graphics('./picture/gangtiexia.jpg')
+knitr::include_graphics('./picture/jianbingxia.jpg')
+knitr::include_graphics('./picture/diaobaoxia.jpeg')
+```
+
+
+```{r 调包侠}
+set.seed(1128)
+a <- rnorm(6, 5, 1) |> round(3)
+b <- rnorm(6, 7, 1) |> round(3)
+df.ab <- data.frame(x = factor(rep(c("a", "b"), each = 6)), y = c(a, b))
+
+test_app <- oneway_test(y ~ x, data = df.ab, distribution = approximate(nresample = 10000))#抽取10000次可能性
+
+test_exa <- oneway_test(y ~ x, data = df.ab, distribution = "exact")#抽取所有可能性，如果样本大会崩溃
+cat("近似法:", pvalue(test_app), "\n")
+cat("精确法:", pvalue(test_exa), "\n")
+```
+
+
+（四）自助法
+1. 定义：通过重复从已有数据中随机抽取样本（**允许重复抽取同一个数据**），来模拟新的样本集，从而估计我们感兴趣的**统计量（如平均值、中位数或标准差等）**的置信区间。前提是如果原始样本是总体的一个良好代表，那么由样本数据构成的经验分布函数 (Empirical Distribution Function, EDF)，就是未知总体分布的一个合理近似。如果使用bootstrap法获得统计检验值，就要计算置信区间包括0的比例。
+bootstrap特别特别要求样本是总体的优秀代表：南师大男女比例2：5，抽取的样本中有5个男生，2个女生，是好的样本吗？
+
+例如：在一所学校中，我们只有50名学生的考试成绩作为样本，但我们想估计整个学校学生的平均成绩及这个平均成绩的可靠性。用传统方法，我们可能会直接计算这50名学生的平均分作为全校的估计。如果使用Bootstrap方法，我们可以从这50名学生的成绩中随机挑选出50个成绩（允许重复/多次挑选同一学生的成绩），计算出一个平均值。重复这个过程许多次（比如1000次），就会得到1000个平均值。这个过程仿佛每次都重新组成一个“虚拟的班级”，通过分析这些“虚拟班级”成绩的平均值分布，我们不仅能得到对全校学生成绩平均值的一个更好估计，还能了解这个估计的可靠性，比如计算出95%的置信区间。
+
+2. 特点：
+（1）不需要对前提假设有要求，适合非正态数据，同置换检验
+（2）适合小样本
+（3）抽样的样本至关重要
+
+3. 实例1（来自于张光耀的知乎）
+```{r}
+A = c(89, 88, 90, 94, 85)
+B = c(88, 87, 90, 85, 86, 83)
+DIFF = mean(A) - mean(B)
+
+DIFF_CI = numeric(length = 10000)
+set.seed(1234)
+for(i in 1:10000){
+  A_bs = sample(x = A, size = 5, replace = TRUE)
+  B_bs = sample(x = B, size = 6, replace = TRUE)
+  DIFF_CI[i] = mean(A_bs) - mean(B_bs)
+}
+
+# DIFF_CI > 0 DIFF_CI < 0 可以用来定位0在置信区间的位置
+p_value = 2 * min(mean(DIFF_CI > 0), mean(DIFF_CI < 0))
+cat("两个班级成绩没有显著差异（即真实差异等于0）的可能性为",  "0.916,", "支持零假设。", "\n")
+
+hist(DIFF_CI, breaks = 30, main = "Bootstrap均值差异分布",
+     xlab = "均值差异 (A-B)", col = "lightblue")
+abline(v = 0, col = "red", lwd = 2)
+```
+
+4. 实例2:计算差异的置信区间
+```{r bootstrap boot包}
+set.seed(123) # 保证结果可重现
+group1 <- rnorm(30, mean = 10, sd = 2) |> round(2)
+group2 <- rnorm(30, mean = 12, sd = 2) |> round(2)
+boot_diff <- two.boot(group1, group2, FUN = mean, R = 9999)
+# 查看Bootstrap抽样分布
+hist(boot_diff$t, main = "Bootstrap Distribution of Mean Difference")
+abline(v = 0, col = "red", lty = 2)
+
+boot_ci <- boot.ci(boot_diff, type = "norm")
+print(boot_ci)
+```
+
+```{r 手动计算}
+set.seed(123) # 保证结果可重现
+group1 <- rnorm(30, mean = 10, sd = 2) |> round(2)
+group2 <- rnorm(30, mean = 12, sd = 2) |> round(2)
+real.diff <- mean(group1) - mean(group2)
+sim.res <- numeric(length = 9999)
+for (i in 1:9999){
+  g1.sam <- sample(group1, 30, replace = TRUE)
+  g2.sam <- sample(group2, 30, replace = TRUE)
+  sim.res[i] <- mean(g1.sam) - mean(g2.sam)
+}
+quantile(sim.res, probs = c(0.025, 0.975))
+#另一种写法
+boot_diff <- function(...) {
+  mean(sample(group1, 30, replace = TRUE)) - mean(sample(group2, 30, replace = TRUE))
+}
+quantile(map_dbl(1:9999, boot_diff), probs = c(0.025, 0.975))
+########
+```
+
+5. 实例3
+```{r 相关系数的bootstrap}
+corr.fun <- function(data, idx) { #构建函数， boot包会自动构建抽样的索引值，即idx
+  df <- data[idx, ]  #根据idx提取数据
+  cor(df[, 3], df[, 4], method = 'spearman') #计算相关
+}
+set.seed(42)
+bootstrap <- boot(iris, corr.fun, R = 1000)
+
+plot(bootstrap)
+boot.ci(boot.out = bootstrap, type = c("norm", "basic", "perc", "bca"))
+```
+
+norm：正态引导法或标准置信区间法使用标准差来计算CI。
+basic：基本引导法或霍尔（第二百分位数）法使用百分位数来计算测试统计量的上下限。
+perc：百分位数引导法或基于四分位数，或近似区间使用四分位数，如2.5%，5%等来计算CI。
+bca：bca bootstrap 或Bias Corrected Accelerated使用带有偏差修正的百分位数限制，估计加速系数修正限制并找到CI。
+
+6. 实例4
+```{r bootstrap+矫正}
+r.df <- data.frame( #三个测验分别对应ABC，修改数字就可以了
+  A = c(1, 3, 5, 6, 10, 4),
+  B = c(2, 4, 6, 6, 4, 4),
+  C = c(11, 12, 4, 6, 9, 4))
+set.seed(1129)
+AB = numeric(length = 1000)
+AC = numeric(length = 1000)
+BC = numeric(length = 1000)
+for (i in 1:1000) {
+  idx <- sample(1 : nrow(r.df), nrow(r.df), replace = TRUE) 
+  boot.df <- r.df[idx, ]
+  result <- bruceR::Corr(boot.df)
+  AB[i] <- result$corr$r[1, 2]
+  AC[i] <- result$corr$r[1, 3]
+  BC[i] <- result$corr$r[2, 3]
+}
+AB.drop <- AB[!is.na(AB)]
+AC.drop <- AC[!is.na(AC)]
+BC.drop <- BC[!is.na(BC)]
+
+#方案1
+p.AB <- mean(abs(AB.drop) >= abs(cor(r.df$A, r.df$B)))
+p.AC <- mean(abs(AC.drop) >= abs(cor(r.df$A, r.df$C)))
+p.BC <- mean(abs(BC.drop) >= abs(cor(r.df$B, r.df$C)))
+p.raw <- c(p.AB, p.AC, p.BC)
+p.fdr <- p.adjust(p.raw, method = "fdr")
+print(p.fdr)
+
+#方案2
+q <- c(0.017 / 2, 1 - 0.017 / 2)
+ci.AB.bf <- quantile(AB.drop, q)
+ci.AC.bf <- quantile(AC.drop, q)
+ci.BC.bf <- quantile(BC.drop, q)
+print(ci.AB.bf);print(ci.AC.bf);print(ci.BC.bf)
+```
+
+
+```{r test comparison}
+cor.boot <- function(df, per.num) {
+  OP = numeric(length = per.num)
+  PQ = numeric(length = per.num)
+  OQ = numeric(length = per.num)
+  for (i in 1:per.num) {
+    idx <- sample(1:nrow(df), nrow(df), replace = TRUE)
+    boot.df <- df[idx, ]
+    result <- bruceR::Corr(boot.df)
+    OP[i] <- result$corr$r[1, 2]
+    PQ[i] <- result$corr$r[1, 3]
+    OQ[i] <- result$corr$r[2, 3]
+  }
+  OP.drop <- OP[!is.na(OP)]
+  PQ.drop <- PQ[!is.na(PQ)]
+  OQ.drop <- OQ[!is.na(OQ)]
+  return(list(OP = OP.drop, PQ = PQ.drop, OQ = OQ.drop))
+}
+
+test <- rio::import("./file/bootstrap_cor.xlsx", sheet = "test")
+O <- test$Word
+P <- test$Running
+Q <- test$Cloz
+cor.df <- data.frame(O, P, Q)
+set.seed(1129)
+boot.result <- cor.boot(cor.df, 500)
+p.OP <- mean(abs(boot.result$OP) >= abs(cor(cor.df$O, cor.df$P)))
+p.PQ <- mean(abs(boot.result$PQ) >= abs(cor(cor.df$P, cor.df$Q)))
+p.OQ <- mean(abs(boot.result$OQ) >= abs(cor(cor.df$O, cor.df$Q)))
+
+p.raw <- c(p.OP, p.OQ, p.PQ)
+p.fdr <- p.adjust(p.raw, method = "fdr")
+print(p.fdr)
+```
+
+
+
+7. bootstrap和Permutaion的异同
+置换检验只适合被试间/组间设计
+```{r}
+knitr::include_graphics('./picture/duibi.png')
+knitr::include_graphics('./picture/zizhuhezhihuan.png')
+```
+
+
+
+
+
+
+
+

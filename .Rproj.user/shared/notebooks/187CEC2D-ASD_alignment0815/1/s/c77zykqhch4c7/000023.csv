@@ -1,0 +1,4 @@
+"0","#ggsave(plot = trace_noeff, ""./figure/trace_noeff.svg"", width = 6, height = 4)"
+"0",""
+"0","qx3.ppcheck <- pp_check(qx3.bayes, ndraws = 100)"
+"0","qx3.ppcheck "

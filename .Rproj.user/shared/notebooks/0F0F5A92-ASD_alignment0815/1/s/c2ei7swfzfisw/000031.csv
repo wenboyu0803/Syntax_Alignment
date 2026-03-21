@@ -1,0 +1,11 @@
+"0","bayestestR::hdi(pf_objects$pf9)
+"
+"1","[34mHighest Density Interval[39m [34m[39m
+
+Parameter    |       95% HDI
+----------------------------
+(Intercept)  | [ 7.13, 8.20]
+GroupASD     | [-0.14, 0.60]
+词类结果动补 | [-0.35, 0.85]
+PPVTZ        | [ 0.10, 0.48]
+"

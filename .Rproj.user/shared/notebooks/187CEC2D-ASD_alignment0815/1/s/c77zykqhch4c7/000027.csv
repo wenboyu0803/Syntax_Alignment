@@ -1,0 +1,3 @@
+"0","qx3.pos <- posterior_predict(qx3.bayes)"
+"0","qx3.hdi <- bayestestR::hdi(qx3.bayes)"
+"0","dfqx$predict = predict(qx3.bayes, type = ""response"")[, 1]"

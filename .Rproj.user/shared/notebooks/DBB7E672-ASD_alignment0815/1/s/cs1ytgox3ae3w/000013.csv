@@ -1,0 +1,7 @@
+"0","jg3.b <- mcmc_plot(jg3.bayes, "
+"0","                   variable = c(""b_Syntax_primeba"","
+"0","                                ""b_Syntax_primebe"","
+"0","                                ""b_GroupASD"","
+"0","                                ""b_PPVTZ""),"
+"0","                   type = ""areas"", prob = 0.95)"
+"0","jg3.b"

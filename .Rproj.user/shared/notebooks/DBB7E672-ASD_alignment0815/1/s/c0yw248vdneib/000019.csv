@@ -1,0 +1,5 @@
+"0","a05.pos <- posterior_predict(a05.bayes)"
+"0","a05.hdi <- bayestestR::hdi(a05.bayes)"
+"0","df05$preidict = predict(a05.bayes, type = ""response"")[, 1]"
+"2","错误: 找不到对象'df05'
+"

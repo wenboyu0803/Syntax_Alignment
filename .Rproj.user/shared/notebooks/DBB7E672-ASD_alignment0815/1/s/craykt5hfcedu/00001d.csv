@@ -1,0 +1,3 @@
+"0",""
+"0","figal <- figalASD / figalTDC"
+"0","ggsave(file = ""./figure/figal.svg"", plot = figal, height = 7, width = 12, dpi = 300)"

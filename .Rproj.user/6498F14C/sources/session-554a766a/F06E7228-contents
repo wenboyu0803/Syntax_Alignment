@@ -1,0 +1,221 @@
+---
+title: "不同水平统计学习者的记忆表征差异"
+author: "Wenbo Yu"
+date: "2023/7/14"
+output: html_document
+---
+
+```{r 载入需要的包}
+library(tidyverse);library(readxl);library(emmeans);
+library(afex);library(bruceR)
+library(ggplot2);library(patchwork)
+```
+
+```{r 3.1检验迫选任务的顺序效应}
+a1<-as.data.frame(read_excel("data/rating_forced.xlsx",sheet = "aaaa"))%>%
+  dplyr::filter(!is.na(forced_answer))
+a2<-a1[-c(3,5,8)]%>%
+  mutate(acc = ifelse(forced_answer == forced_subject,1,0))%>%
+  mutate(len = ifelse(str_length(a1$stimulus) > 20,"trisyllabic","disyllabic"))%>%
+  mutate(order = ifelse((Subject%%2 == 0),"Force first","Rating first"))%>%
+  rename(Judgement = acc)%>%
+  mutate(order = as.factor(order))
+Two_afc_order_effect <- afex::mixed(data = a2,Judgement ~ order + (1|Subject) + (1|stimulus),
+                                  family = binomial, method = "LRT",
+                                  check_contrasts = FALSE)
+summary(Two_afc_order_effect);anova(Two_afc_order_effect)
+```
+```{r 3.1熟悉度评分任务的顺序效应}
+b1<-as.data.frame(read_excel("data/rating_forced.xlsx",sheet = "aaaa"))%>%
+  dplyr::filter(is.na(forced_answer))%>%
+  dplyr::select(-forced_answer, -forced_subject)%>%
+  dplyr::mutate(length = ifelse(str_length(stimulus)>10, "trisyllabic","disyllabic"))%>%
+  dplyr::mutate(word_type = as.factor(ifelse(type == 1,"target word",
+                                             ifelse(type == 2,"partword","nonword"))))%>%
+  dplyr::mutate(order = ifelse((Subject%%2 == 0),"Force first","Rating first"))%>%
+  dplyr::select(-type)%>%
+  dplyr::mutate(word_type = as.factor(word_type),order = as.factor(order))
+rating_order_effect<-afex::mixed(rating_subject ~ order * word_type + (1|Subject) + (1|stimulus),
+                                 data = b1,check_contrasts = FALSE)
+summary(rating_order_effect);anova(rating_order_effect)
+```
+```{r 数据整理}
+#通过真正学习标准对被试进行分组
+criterion <- (1.645 * sqrt(16 * 0.5 * 0.5) + 16 * 0.5)/16
+a21 <- group_by(a2, Subject)%>%
+  summarise(ACC = mean(Judgement),.groups = "keep")%>%
+  mutate(level = ifelse(ACC > criterion, "高水平学习者","低水平学习者"))%>%
+  as.data.frame()
+#将熟悉度评分任务和迫选任务合并，并且修改变量名称
+ab <- merge(x = b1,y = a21, by = c("Subject"),all.x = T)%>%
+  dplyr::select(-ExperimentName, -Block, -order)%>%
+  dplyr::mutate(word_type = factor(word_type, levels = c("target word", "partword", "nonword")),
+                level = factor(level, levels = c("高水平学习者", "低水平学习者")))%>%
+  dplyr::mutate(word_type = case_when(word_type == "target word" ~ "目标词",
+                                      word_type == "partword" ~ "跨界词",
+                                      word_type == "nonword" ~ "非词"))
+```
+
+```{r 3.2 强迫选择任务和熟悉度评分任务的相关分析}
+ab_acc <- dplyr::select(ab,Subject, ACC) %>% unique()
+ab_corr <- dplyr::select(ab, -stimulus, -length, -level)%>%
+  group_by(Subject, word_type)%>%
+  summarise(mean_type = mean(rating_subject))%>%
+  ungroup()%>%
+  as.data.frame()%>%
+  merge(x=., y = ab_acc, by = "Subject")%>%
+  pivot_wider(names_from = word_type,
+              values_from = mean_type)%>%
+  mutate(Rating_difference = `目标词` - `跨界词`)%>%
+  as.data.frame()
+bruceR::Corr(data = ab_corr[,c(2, 6)])
+```
+
+```{r 3.3真正学习标准的组别效应}
+#所有被试的学习效应
+learning_effect_of_all_subs <- t.test(a21$ACC,mu = 0.5)
+#高水平被试的学习效应
+superior <- t.test(a21[a21$level!= "低水平学习者", 2],mu = 0.5)
+#低水平被试的学习效应
+regular <- t.test(a21[a21$level == "低水平学习者", 2],mu = 0.5)
+#高低水平被试学习效应的差异
+learning_dif_between_groups <- t.test(a21$ACC~a21$level,alternative = "two.sided")
+learning_effect_of_all_subs; learning_dif_between_groups
+superior; regular
+```
+```{r 3.4不同水平学习者在不同词类上的评分差异分析}
+#全模型
+rating_level_model1 <- afex::mixed(rating_subject ~ level * word_type + 
+                                     (1 + word_type|Subject) + (1|stimulus),
+                                  data = ab, check_contrasts = FALSE)
+#简化模型
+rating_level_model2 <- afex::mixed(rating_subject ~ level*word_type + (1|Subject) + (1|stimulus),
+                                   data = ab, check_contrasts = FALSE)
+anova(rating_level_model2)
+summary(rating_level_model2)
+emmeans(rating_level_model2,~level|word_type,contr = "pairwise",data = ab, adjust = "bonferroni")
+emmeans(rating_level_model2,~word_type|level,contr = "pairwise",data = ab, adjust = "bonferroni")
+#所有被试的熟悉度评分检验
+rating_model3 <- afex::mixed(data = ab, rating_subject ~ word_type + (1|stimulus) + (1|Subject),
+                             check_contrasts = FALSE)
+summary(rating_model3)
+anova(rating_model3)
+emmeans(rating_model3, ~word_type, contr = "pairwise", data = ab, adjust = "bonferroni")
+```
+
+```{r 3.5不同水平被试判断标准的检验}
+sdt_d <- as.data.frame(read_excel("data/rating_forced.xlsx",sheet = "SDT"))
+bruceR::TTEST(data = sdt_d, y = "d", x = "groups")
+sdt_beita <- as.data.frame(read_excel("data/rating_forced.xlsx",sheet = "SDT"))
+bruceR::TTEST(data = sdt_d, y = "beita", x = "groups")
+```
+
+```{r figure: 被试分布情况}
+windowsFonts(TNR = windowsFont("Times New Roman"),
+             Arial = windowsFont("Arial"))
+a3 <- dplyr::select(a2, Subject, Judgement)%>%
+  group_by(Subject)%>%
+  summarise(Scores = sum(Judgement))%>%
+  ungroup()%>%
+  as.data.frame()
+pinlv <- ggplot2::ggplot(data = a3, aes(x = Scores))+
+  ggplot2::geom_histogram(color = "deepskyblue3", fill = "transparent", 
+                          binwidth = 1, linewidth = 1)+
+  theme_classic()+
+  geom_vline(xintercept = 11.5,color = "darkred", linewidth = 1)+
+  labs(x = "得分", y = "人数")+
+  coord_cartesian(ylim = c(1,10.5))+
+  theme(axis.text.x = element_text(family = "TNR", size = 14,color = "black", face = "bold"),
+        axis.text.y = element_text(family = "TNR", color = "black",size = 14, face = "bold"),
+        axis.title.y = element_text(family = "TNR", size = 16, face = "bold"),
+        axis.title.x = element_text(family = "TNR", size = 16, face = "bold"))
+pinlv
+ggsave("figure/pinlv.pdf",
+       device = cairo_pdf,
+       width =5,
+       height =4)
+ggsave("figure/pinlv.jpg", pinlv, width=8, height=5)
+```
+
+```{r figure 2}
+# figure 2A: 迫选任务和熟悉度评分任务的相关分析
+fig2A <- ggplot(data = ab_corr)+
+  geom_point(aes(x = Rating_difference, y = ACC),
+             color="darkorange", shape=21,  fill = "transparent", size = 3.5, stroke = 1.5)+
+  geom_smooth(aes(x = Rating_difference, y = ACC),
+            method = "lm", colour = "deepskyblue3", fullrange = FALSE, level = 0.95)+
+  annotate("text", x = 2, y = 1.2, label = "r (74) = 0.45, p < 0.001", size = 5, color = "darkred")+
+  labs(y= "强迫选择任务正确率", x = "熟悉度评分任务成绩")+
+  theme_classic()+
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(family = "TNR", size = 14,color = "black", face = "bold"),
+        axis.text.y = element_text(family = "TNR", color = "black", size = 14, face = "bold"),
+        axis.title.x = element_text(family = "TNR", size = 16, face = "bold"),
+        axis.title.y = element_text(family = "TNR", size = 16, face = "bold"))
+fig2A
+
+# figure 2B: 真正学习标准的分组效应
+fig2B <- ggplot(data = a21)+
+  stat_boxplot(aes(x = level, y = ACC, color = level), 
+               geom = "errorbar",linewidth = 1.1, width = 0.4)+
+  geom_boxplot(aes(x = level, y = ACC, color = level),
+               size = 1.1, width = 0.6)+
+  scale_color_manual(values = c("deepskyblue3","darkorange"))+
+  theme_classic() + 
+  theme(legend.position = "none")+
+  stat_boxplot(aes(x = 3,y = ACC),color = "gray40",
+               geom = "errorbar", linewidth = 1.1, width = 0.4)+
+  geom_boxplot(aes(x = 3,y = ACC),size = 1.2,width = 0.6,color = "gray40")+
+  scale_x_discrete(limits=c("高水平学习者", "低水平学习者", "全部学习者"))+
+  geom_segment(aes(x = 1,y = 1.1, xend = 2, yend = 1.1), linewidth = 0.5)+
+  annotate("text",x = 1.5,y = 1.12, label = "**", size = 7, color = "darkred")+
+  labs(x = NULL,y = "强迫选择任务正确率")+
+  theme(axis.text.x = element_text(family = "TNR", size = 16, color= "black", face = "bold"),
+        axis.text.y = element_text(family = "TNR", color = "black",size = 14, face = "bold"),
+        axis.title.y = element_text(family = "TNR", size = 16, face = "bold"))
+fig2B
+# figure 2C: 不同水平学习者的表征差异
+abc<-group_by(ab, Subject, word_type, level)%>%
+  summarise(junzhi = mean(rating_subject), .groups="keep")%>%
+  as.data.frame()
+fig2C <- ggplot(ab, aes(x = word_type, y = rating_subject, color = level, fill = level))+
+  stat_summary(fun = mean,geom = "bar",
+               position = position_dodge(width = 0.8),
+               linewidth = 1.0, width = 0.75, fill = "transparent")+
+  stat_summary(fun.data = mean_cl_normal, color = "darkred", geom = "errorbar", 
+               width = 0.15, size = 0.8, position = position_dodge(width = 0.8))+
+  labs(x = NULL,y="熟悉度评分")+
+  scale_color_manual(values = c("darkorange", "deepskyblue3"))+
+  theme_classic()+
+  theme(panel.grid.major = element_blank())+
+  theme(legend.position = c(0.85,0.95), 
+        legend.text =  element_text(family = "TNR",color = "black",size = 12, face = "bold"),
+        legend.title = element_blank(),
+        legend.background = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5))+
+  coord_cartesian(ylim = c(1.5,7.7))+
+  geom_point(data = abc,aes(word_type, junzhi, color = level),
+             position = position_jitterdodge(0.2),shape = 21, size = 2.5, 
+             stroke = 1, fill = "transparent")+
+  scale_x_discrete(limits=c("目标词", "跨界词", "非词"))+
+  annotate("text",x = 2,y = 7.55,label = "*",size = 6, color = "darkred")+
+  annotate("text",x = 1.7, y = 7.45, label = "n.s.",size = 3.5, color = "black")+
+  annotate("text",x = 1.35, y = 7.75, label = "**", size = 6, color = "darkred")+
+  geom_segment(aes(x = 0.8, y = 7.65, xend = 1.8, yend = 7.65), size = 0.5, color = "black")+
+  geom_segment(aes(x = 1.8, y = 7.45, xend = 2.2, yend = 7.45), size = 0.5, color = "black")+
+  geom_segment(aes(x = 1.2, y = 7.25, xend = 2.2, yend = 7.25), size = 0.5, color = "black")+
+  theme(axis.text.x = element_text(family = "TNR", size = 16,color = "black", face = "bold"),
+        axis.text.y = element_text(family = "TNR", color = "black", size = 14, face = "bold"),
+        axis.title.y = element_text(family = "TNR", size = 16, face = "bold"))
+fig2C
+
+fig2 <- pinlv + fig2A + fig2B + fig2C +
+  plot_layout(nrow = 2) +
+  plot_annotation(tag_levels = "A")
+ggsave("figure/fig2.tiff", width = 13, height = 9.5)
+ggsave("figure/fig2.pdf",
+       device = cairo_pdf,
+       width =13,
+       height =9.5)
+```
+

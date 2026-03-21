@@ -1,0 +1,2 @@
+"0","be1.pos <- posterior_predict(be1.bayes)"
+"0","be1.hdi <- bayestestR::hdi(be1.bayes)"

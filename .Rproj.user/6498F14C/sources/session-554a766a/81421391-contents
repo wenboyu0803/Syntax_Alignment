@@ -1,0 +1,449 @@
+---
+title: "Lecture11"
+author: "Wenboyu"
+date: "2025-11-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+  tidyverse,#数据整理必备包
+  ggplot2, #画图必备包
+  bruceR, #各种统计检验的包
+  nortest, #正态分布检验
+  patchwork,#拼图包
+  showtext, #汉字字体包
+  ggsci,#颜色包
+  writexl, #写出excel
+  ggbeeswarm, #蜜蜂图包
+  gghalves, #半幅图包
+  papaja
+)
+options(scipen = 9999) #关闭科学计数法
+```
+
+课程安排：
+(1)统计分析：4次(假设检验+T检验;方差分析;回归和相关;样本量估计小样本和不显著)
+(2)画图：3次
+(3)眼动软件操作：1次
+
+零 课程内容
+1 假设检验（重点内容）
+（1）抽样分布
+（2）显著性水平和置信区间
+（3）效应量
+2 统计检验分类
+3 T检验
+（1）代码
+（2）报告
+
+对于宋婷立的数据，我们想得到什么结论？
+外国留学生利用词首和词尾概率信息进行词汇识别的能力和中国人有明显差别，而且受到汉语水平的影响。
+这是一个总体的结论还是一个样本的结论？
+
+#####
+思考样本和群体的关系
+```{r}
+knitr::include_graphics('./picture/renkoupucha.png')
+```
+#####
+
+
+一 假设检验
+（一）抽样分布
+1. 基本思想：费舍检验的统计分析是根据样本分布来推断总体的分布情况，因此知道样本的分布情况非常重要，样本的称为抽样分布。以平均数为例，如果总体呈正态分布，那么在有放回的抽样中，所获得的每个样本均值的分布仍旧符合正态分布，而且样本均值的均值和总体均值相等。类似的，方差的分布符合F分布。
+
+2. 如何在R里面演示上面的过程呢？
+```{r 总体分布}
+set.seed(11.19)
+#成绩是正态分布的，平均数和标准差是10和5，这些都是参数，但我们不知道，我们就要估计参数
+#但是没有办法调查所有人，只能抽取一个样本来进行“推断”
+data1 <- data.frame(rnorm(100000,10,5))  #假设总体就是这些人，获得参数
+colnames(data1) <- "shuju"
+m1 <- mean(data1$shuju)
+#100000个人的分布图
+a_plot <- ggplot(data = data1, aes(x = shuju))+
+  geom_density(adjust = 1.75)
+a_plot
+```
+
+```{r 抽样分布，抽样100次}
+#无限次抽样，看看无限次抽样的样本的平均数的分布是什么样的(抽样100次)
+df <- list()
+m <- c()
+for (i in 1:100){
+      df[[i]] <- data.frame(sample(data1$shuju, 100))
+      colnames(df[[i]]) <- "shuju"
+      m[[i]] <- mean(df[[i]]$shuju)
+}  
+m <- as.data.frame(unlist(m))
+colnames(m) <- "shuju1"
+b_plot <- ggplot(data = m, aes(x = shuju1))+
+  geom_density(adjust = 1.75)
+b_plot
+```
+
+```{r 抽样分布，抽样200次}
+df <- list()
+m <- c()
+for (i in 1:200){
+      df[[i]] <- data.frame(sample(data1$shuju, 100))
+      colnames(df[[i]]) <- "shuju"
+      m[[i]] <- mean(df[[i]]$shuju)
+}  
+m <- as.data.frame(unlist(m))
+colnames(m) <- "shuju1"
+c_plot <- ggplot(data = m, aes(x = shuju1))+
+  geom_density(adjust = 1.75)
+c_plot
+```
+
+```{r 抽样分布，抽样1000次}
+df <- list()
+m <- c()
+for (i in 1:1000){
+      df[[i]] <- data.frame(sample(data1$shuju, 100))
+      colnames(df[[i]]) <- "shuju"
+      m[[i]] <- mean(df[[i]]$shuju)
+}  
+m <- as.data.frame(unlist(m))
+colnames(m) <- "shuju1"
+d_plot <- ggplot(data = m, aes(x = shuju1))+
+  geom_density(adjust = 1.75)
+d_plot
+```
+
+样本数量不变，随着抽样次数的增加，样本平均数的分布和总体均值的分布相同
+```{r 四个图拼在一起}
+df <- list()
+m <- c()
+for (i in 1:2000){
+      df[[i]] <- data.frame(sample(data1$shuju, 100))
+      colnames(df[[i]]) <- "shuju"
+      m[[i]] <- mean(df[[i]]$shuju)
+}  
+m <- as.data.frame(unlist(m))
+colnames(m) <- "shuju1"
+e_plot <- ggplot(data = m, aes(x = shuju1))+
+  geom_density(adjust = 1.75)
+
+library(patchwork)
+fig.5 <- a_plot + b_plot + c_plot + d_plot + e_plot
+fig.5
+```
+
+（二）中心极限定理（录制视频）
+1. 当总体样本成正态分布时，当样本量小于30时，抽样分布仍旧呈正态
+2. 当总体样本不呈正态或者不确定时，当样本量大于30时，抽样分布仍旧呈正态
+```{r 构建一个非正态分布的总体数据}
+normal_data <- rnorm(n = 100000, mean = 0, sd = 1)
+right_skewed <- exp(normal_data)  # 右偏
+m1 <- as.data.frame(right_skewed)
+colnames(m1) <- "shuju1"
+d_plot <- ggplot(data = m1, aes(x = shuju1))+
+  geom_density(adjust = 1.75)
+d_plot
+#nortest::ad.test(m1$shuju1)
+```
+
+```{r 样本量较大时无需考虑总体分布}
+df <- list()
+m <- c()
+for (i in 1:1000){
+      df[[i]] <- data.frame(sample(m1$shuju1, 100))
+      colnames(df[[i]]) <- "shuju"
+      m[[i]] <- mean(df[[i]]$shuju)
+}  
+m2 <- as.data.frame(unlist(m))
+colnames(m2) <- "shuju2"
+b_plot <- ggplot(data = m2, aes(x = shuju2))+
+  geom_density(adjust = 1.75)
+b_plot
+```
+
+
+```{r 练习：当总体样本成正态分布时，当样本量小于30时，抽样分布仍旧呈正态}
+
+```
+
+
+（三） 显著性（p值）是什么意思?
+1. 通俗理解：既然抽样分布是以总体平均数为均值的分布，那么如果我们抽取样本的平均数距离总体（抽样）平均数特别远，那么我们就认为是小概率事件发生了，也就是显著了。
+```{r 阿尔法值}
+M <- unlist(m) |> as.data.frame()
+colnames(M) <- "shuju2"
+dd_plot <- ggplot(data = M, aes(x = shuju2))+
+  geom_density(adjust = 1.75)+
+  geom_vline(xintercept = 2.25, color = "red")
+dd_plot
+```
+
+如何理解单样本T检验：
+（1）假设南师大学生平均身高167cm
+（2）我要检验2306班身高是否和平均身高显著差异
+（3）我们可以从南师大学生群体中反复抽样，样本平均数形成一个抽样分布，抽样分布的均值和总体一样，167
+（4）2306班的平均身高是160，距离抽样分布中的平均值很远，属于小概率事件
+（5）拒绝零假设，该班学生平均身高和南师大学生身高差异显著
+
+2. 官方理解：当原假设为真时，得到当前样本以及比所得到的样本结果更极端的结果的概率。
+
+
+（二）显著性水平和置信区间
+1. α值
+2.点估计（准确但不可靠）和区间估计（不准但是可靠）
+置信区间公式：
+$$\bar{x} \pm z_{\alpha/2} \cdot \frac{\sigma}{\sqrt{n}}$$
+3.置信区间的理解（Confidence Intervals）
+（1）在抽样分布下：抽样分布理论告诉我们，样本量越大，抽样分布越接近正态分布
+（2）标准误样本量越大，那么标准误越小，原始参数的估计越明确
+```{r 样本量对置信区间的影响}
+sample_mean <- 50    # 样本均值
+sample_sd <- 10      # 样本标准差
+sample_sizes <- c(10, 20, 30, 50, 100)  # 五种样本量
+
+calc_z_ci <- function(n) {
+  se <- sample_sd / sqrt(n)  # 标准误
+  z_critical <- qnorm(0.975)  # Z临界值（1.96）
+  lower <- sample_mean - z_critical * se
+  upper <- sample_mean + z_critical * se
+  return(c(lower = lower, upper = upper))
+}
+
+z_ci_results <- sapply(sample_sizes, function(n)
+  calc_z_ci(n))
+z_ci_df <- data.frame(t(z_ci_results))
+z_ci_df$sample_size <- as.factor(sample_sizes)
+
+ggplot(z_ci_df, aes(x = sample_size, ymin = lower, ymax = upper)) +
+  geom_errorbar(width = 0.3,
+                position = position_dodge(width = 0.2),
+                linewidth = 1.2) +
+  geom_point(
+    aes(y = sample_mean),
+    color = "black",
+    size = 3,
+    position = position_dodge(width = 0.2)
+  ) +
+  labs(x = "样本量", y = "数值范围") +
+  theme_minimal() +
+  coord_flip()
+```
+
+置信区间的宽窄还受到置信水平的影响
+
+
+（3）置信区间的误解
+民间理解：这次实验的置信区间包括了参数的可能性是95%
+准确含义：如果我们重复抽样100次，每次都用同样的方法构造一个区间，那么大约95个区间会包含真实的参数值。##置信区间指的是从长远看，而非当前抽样##
+rpsychologist.com
+
+
+（三）效应量（effect size）
+1. 定义：Cohen d效应量就是当虚无假设为假的时候，反映与虚无假设分离程度的指标（1988，P9）；或者理解成当虚无假设为假时，假的程度是多少。
+```{r 效应量}
+data2 <- data.frame(rnorm(100000,10,5))
+data3 <- data.frame(rnorm(100000,12,5))
+data4 <- data.frame(rnorm(100000,17,5))
+colnames(data2) <- "shuju"
+colnames(data3) <- "shuju"
+colnames(data4) <- "shuju"
+data <- rbind(data2, data3, data4) %>%
+  mutate(mean = c(rep("十", 100000), 
+                  rep("十二", 100000), 
+                  rep("十七", 100000)))
+
+xiao_plot <- ggplot(data = data, aes(x = shuju, color = mean))+
+  geom_density(adjust = 1.75)+
+  scale_color_lancet()+
+  ggtitle("效应量")
+xiao_plot
+```
+
+
+效应量是衡量实验效应强度或者变量关联强度的指标
+普遍认为d值大小以0.2，0.5和0.8分界
+```{r 效应量的种类}
+knitr::include_graphics('./picture/xiaoyingliang.png')
+```
+
+2. 效应量的作用
+（1）不受或较小受到样本量的影响
+$$d = \frac{\bar{X}_1 - \bar{X}_2}{s_p}$$
+$$d = \frac{\bar{X}_{diff}}{s_{diff}}$$
+$$\eta^2 = \frac{SS_{between}}{SS_{total}}$$
+
+（2）有助于元分析或实验间比较
+（3）特别小的效应量并没有意义（区分了显著性结果和实验性结果）
+A：心脏病药的药效普遍是3%，一种新的心脏病药的效果能把心脏的活动效率提高5%
+B：减肥药的药效普遍是18%，一种新的减肥药能够把减肥的效果提高20%
+两种新药的效果都达到显著水平。
+新研发的减肥药没有什么特别价值，但心脏病的药物很有价值。
+
+
+二 统计检验分类
+（一）参数检验：知道总体数据的分布，比如正态分布
+#####
+是总体正态，而不是样本正态
+是总体正态，而不是样本正态
+是总体正态，而不是样本正态
+只是用样本的正态性来推断总体的情况，因为永远不知道总体
+#####
+（二）非参数检验：不需要假设总体数据的分布
+
+
+三 T检验
+```{r 导入数据}
+df.0 <- rio::import("./hebing.csv")%>%
+  group_by(subject, sex, Group, Ini.pro, End.pro)%>%
+  summarise(RT = mean(RT))
+df.0
+```
+
+（一）单样本T检验
+1. 具体代码
+所有被试的平均反应时间超过了2s呢？
+H0是什么？
+H1是什么？
+```{r one sample使用stats函数}
+t.one.0 <- stats::t.test(x = df.0$RT, mu = 2)
+capture.output(t.one.0) #结果好看一点
+```
+
+```{r one sample使用bruceR包中的函数}
+t.one.1 <- bruceR::TTEST(data = df.0, y = "RT", test.value = 2)
+```
+
+2. 结果报告
+基础：本研究使用R语言进行数据分析（4.5.1）。对数据进行单样本T检验，结果发现t(23) = -12.049, p < 0.001，说明被试的反应时间显著短于2s。
+完整：本研究使用R语言进行数据分析（4.3.1）。对数据进行单样本T检验，结果发现t(23) = -12.049, p < 0.001,差异95%CIs = [-1.15,-0.81]
+效应量 d = -2.46，说明被试的反应时间显著短于2s，而且效应量很大。
+
+（二）独立样本T检验
+1. 具体代码
+男女被试是否有显著差异呢？
+```{r 独立样本T检验 使用t.test函数}
+df.0["sex"] <- as.factor(df.0$sex)
+df.0 <- df.0 %>%
+  group_by(subject, sex)%>%
+  summarise(RT = mean(RT))
+df.0
+t.inde.0 <- stats::t.test(df.0$RT ~ df.0$sex,
+                          alternative = "two.sided",
+                          var.equal = TRUE) #假设方差齐性，不做矫正
+
+#方差齐性检验
+car::leveneTest(RT ~ sex, data = df.0)
+
+t.inde.1 <- stats::t.test(data = df.0, RT ~ sex,  #推荐这种写法
+                          alternative = "two.sided",
+                          var.equal = FALSE) #如果不齐性，会矫正
+#单侧检验
+stats::t.test(data = df.0, RT ~ sex, alternative = "greater")
+```
+
+对Ini.pro的两个水平进行独立样本T检验
+```{r 独立样本T检验练习}
+df.0 <- rio::import("./hebing.csv")%>%
+  group_by(subject, sex, Group, Ini.pro)%>%
+  summarise(RT = mean(RT))
+df.0
+
+t.inde.4 <- t.test(data = df.0, RT ~ Ini.pro)
+
+t.inde.3 <- df.0 %>%
+  pivot_wider(names_from = Ini.pro, values_from = RT)
+
+t.inde.3.re <- t.test(t.inde.3$H, t.inde.3$L, var.equal = TRUE)
+
+capture.output(t.inde.3.re) #结果好看一点
+```
+
+推荐使用bruceR包，可以报告效应量。
+```{r independent 使用bruceR包中的函数}
+t.inde.4 <- bruceR::TTEST(data = df.0, y = "RT", x = "sex")
+#同时完成两个自变量
+t.inde.5 <- bruceR::TTEST(data = df.0, y = "RT", x = c("sex", "Ini.pro"))
+```
+
+## Independent-samples t-test ##
+TTEST(d1, "SCORE", x="A")
+TTEST(d1, "SCORE", x="A", var.equal=FALSE)
+TTEST(d1, y="Y1", x=c("A", "B", "C"))
+TTEST(d1, y=c("Y1", "Y2"), x=c("A", "B", "C"),
+      mean.diff=FALSE,  # remove to save space
+      file="t-result.doc")
+      
+2. 结果报告
+独立样本T检验结果显示，t(22) = -1.97，p = 0.06，d =﹣0.81，差异的95%CI：[﹣0.62, 0.02]，结果说明男性和女性反应时间差异不显著。
+
+（三）配对样本T检验
+1. 具体代码
+在变量Ini.pro中，两个水平之间的反应时间是否有显著差异?
+```{r}
+df.0 <- rio::import("./hebing.csv")%>%
+  group_by(subject, sex, Group, Ini.pro, End.pro)%>%
+  summarise(RT = mean(RT))
+df.1 <- df.0 %>% 
+  group_by(subject, Ini.pro)%>%
+  summarise(RT = mean(RT))%>%
+  mutate(Ini.pro = factor(Ini.pro))
+df.1
+```
+
+
+```{r dependent t-test}
+t.de.0 <- t.test(df.1$RT[df.1$Ini.pro == "H"], 
+                 df.1$RT[df.1$Ini.pro == "L"], 
+                 paired = T, alternative = "two.sided")
+capture.output(t.de.0)
+
+df.2 <- df.1 %>% pivot_wider(names_from = Ini.pro, values_from = RT)
+t.de.2 <- t.test(df.2$H, df.2$L, paired = TRUE)
+
+t.de.3 <- bruceR::TTEST(data = df.2, y = c("H", "L"), paired = TRUE)
+```
+
+
+2.结果报告
+（1）数据+对应的结果
+配对样本T检验结果显示，××，差异的95%CI：××，结果说明：××。
+（2）结果+对应的数据
+使用配对样本T检验，结果显示在Ini.pro变量中的两个水平上，被试的反应时间没有显著差异（t(5) = -1.07, p = 0.333, 差异95%CI = [-0.16, 0.39], d = 0.44）。
+
+```{r 练习1}
+#因变量是RT，计算被试的反应时间是否显著高于3s（余数0）
+df.0 <- import("./hebing.csv") %>%
+  group_by(subject, sex, Group, Ini.pro, End.pro)%>%
+  summarise(RT = mean(RT))
+df.0
+
+df.1 <- df.0 %>%
+  group_by(subject)%>%
+  summarise(rt.sub = mean(RT))
+
+an.1 <-bruceR::TTEST(data = df.1, y = "rt.sub", test.value = 3)
+```
+
+```{r 练习2}
+#因变量是RT，自变量是group中的高水平和中水平外国人，检验差异（余数1）
+df.0 <- import("./hebing.csv") %>%
+  group_by(subject, Group)%>%
+  summarise(RT = mean(RT))%>%
+  filter(Group != "Chinese")%>%
+  ungroup()
+df.0
+an.2 <- bruceR::TTEST(data = df.0, y = "RT", x = "Group")
+```
+
+```{r 练习3}
+#因变量是RT，自变量是End.pro中的两个水平，完成配对样本T检验（余数2）
+df.0 <- import("./hebing.csv") %>%
+  group_by(subject, End.pro)%>%
+  summarise(RT = mean(RT))%>%
+  ungroup()%>%
+  pivot_wider(names_from = End.pro, values_from = RT)
+an.3 <- bruceR::TTEST(data = df.0, y = c("H", "L"), paired = TRUE)
+```
+
+

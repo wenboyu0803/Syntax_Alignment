@@ -1,0 +1,6 @@
+"0","be1.b <- mcmc_plot(be1.bayes, "
+"0","                   variable = c(""b_Syntax_primebe"","
+"0","                                ""b_GroupASD"","
+"0","                                ""b_Syntax_primebe:GroupASD""),"
+"0","                   type = ""areas"", prob = 0.95)"
+"0","be1.b"

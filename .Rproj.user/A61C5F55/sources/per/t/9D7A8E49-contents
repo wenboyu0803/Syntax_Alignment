@@ -1,0 +1,444 @@
+---
+title: "asd_alignment"
+author: "Wenbo Yu"
+date: "2025-08-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+pacman::p_load(
+  here,
+  tidyverse,
+  ggplot2,
+  fUnitRoots,
+  bruceR,
+  lmerTest,
+  lme4,
+  broom,
+  afex,
+  patchwork,
+  brms,
+  showtext,
+  interactions,
+  ggsci,
+  writexl,
+  mclogit,
+  ggbeeswarm,
+  PsychWordVec
+)
+options(scipen = 9999, digits = 5)
+```
+
+```{r}
+pipei <- rio::import("./data/Result0915.xlsx", which = "Sheet1")
+set.seed(123)
+n = 3000
+result <- data.frame(
+  ID = integer(n),
+  viq.p = numeric(n),
+  viqdiffe = numeric(n),
+  tiq.p = numeric(n),
+  totdiffe = numeric(n),
+  age.p = numeric(n),
+  agediffe = numeric(n),
+  stringsAsFactors = FALSE
+)
+sam_num <- list()
+TD <- pipei |> dplyr::filter(Group == "TD" & VIQ < 140)
+AS <- pipei |> dplyr::filter(Group != "TD" & VIQ >= 90)
+for (i in 1:n) {
+  sam <- sample(nrow(TD), nrow(AS), replace = FALSE)
+  sam_num[[i]] <- sam
+  sub_TD <- TD[sam, ]
+  viqmatch <- t.test(sub_TD$VIQ, AS$VIQ)
+  viqdiffe <- mean(sub_TD$VIQ) - mean(AS$VIQ)
+  totmatch <- t.test(sub_TD$TIQ, AS$TIQ)
+  totdiffe <- mean(sub_TD$TIQ) - mean(AS$TIQ)
+  agematch <- t.test(sub_TD$Age, AS$Age)
+  agediffe <- mean(sub_TD$Age) - mean(AS$Age)
+  result[i, ] <- c(
+    i,
+    viqmatch$p.value,
+    viqdiffe,
+    totmatch$p.value,
+    totdiffe,
+    agematch$p.value,
+    agediffe
+  )
+}
+
+result_new <- result |> arrange(across(c(viq.p, tiq.p, age.p), desc))
+filtered_result <- result_new[result_new$viq.p > 0.05 &
+                                result_new$tiq.p > 0.05 & result_new$age.p > 0.05, ]
+
+# dir.create("pipei")
+# for (m in filtered_result$ID) {
+#   TD_new <- TD[unlist(sam_num[m]), ]
+#   name <- paste0("./pipei/", paste0(m, ".xlsx"))
+#   write_xlsx(TD_new, name)
+# }
+# write_xlsx(AS, "./pipei/ASD.xlsx")
+```
+
+```{r 评分}
+files = fs::dir_ls("./new_Rating")
+Rating.df <- purrr::map_dfr(files, readxl::read_xlsx) 
+
+Rating.df.mean <- Rating.df |>
+  dplyr::filter(Rating != "无产出" & Rating != "未产出") |>
+  dplyr::mutate(Rating = as.numeric(Rating)) |>
+  dplyr::filter(Rating >=1 & Rating < 10)|>
+  group_by(Rate_ID) |>
+  summarise(Rating.mean = mean(Rating)) |>
+  ungroup()|>
+  as.data.frame()
+
+#评分
+asd_filtered <- Rating.df.mean |> filter(grepl("ASD", Rate_ID, ignore.case = TRUE))
+asd_zh <- asd_filtered[grepl("zh$", asd_filtered$Rate_ID), ]
+asd_ba <- asd_filtered[grepl("ba$", asd_filtered$Rate_ID), ]
+asd_be <- asd_filtered[grepl("be$", asd_filtered$Rate_ID), ]
+tdc_filtered <- Rating.df.mean |> filter(grepl("TDC", Rate_ID, ignore.case = TRUE))
+tdc_zh <- tdc_filtered[grepl("zh$", tdc_filtered$Rate_ID), ]
+tdc_ba <- tdc_filtered[grepl("ba$", tdc_filtered$Rate_ID), ]
+tdc_be <- tdc_filtered[grepl("be$", tdc_filtered$Rate_ID), ]
+
+
+#字数
+asd_zh_df <- Rating.df[
+  grepl("ASD", Rating.df$Rate_ID, ignore.case = TRUE) & 
+  grepl("zh$", Rating.df$Rate_ID, ignore.case = TRUE),
+]
+asd_ba_df <- Rating.df[
+  grepl("ASD", Rating.df$Rate_ID, ignore.case = TRUE) & 
+  grepl("ba$", Rating.df$Rate_ID, ignore.case = TRUE),
+]
+asd_be_df <- Rating.df[
+  grepl("ASD", Rating.df$Rate_ID, ignore.case = TRUE) & 
+  grepl("be$", Rating.df$Rate_ID, ignore.case = TRUE),
+]
+
+tdc_zh_df <- Rating.df[
+  grepl("TDC", Rating.df$Rate_ID, ignore.case = TRUE) & 
+  grepl("zh$", Rating.df$Rate_ID, ignore.case = TRUE),
+]
+tdc_ba_df <- Rating.df[
+  grepl("TDC", Rating.df$Rate_ID, ignore.case = TRUE) & 
+  grepl("ba$", Rating.df$Rate_ID, ignore.case = TRUE),
+]
+tdc_be_df <- Rating.df[
+  grepl("TDC", Rating.df$Rate_ID, ignore.case = TRUE) & 
+  grepl("be$", Rating.df$Rate_ID, ignore.case = TRUE),
+]
+```
+
+
+```{r}
+b1 <- rio::import("./data/Result0915.xlsx", which = "Block1")
+b2 <- rio::import("./data/Result0915.xlsx", which = "Block2")
+b3 <- rio::import("./data/Result0915.xlsx", which = "Block3")
+basic <- rio::import("./data/Result0915.xlsx", which = "basic")
+
+# control_params <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+# contrasts(df$Group) <- contr.treatment(2)
+# contrasts(df$Syntax_prime)<-contr.treatment(3)
+# model.1 <- lme4::glmer(
+#   data = df,
+#   Syntax_ACC ~Syntax_prime * Group + (1| Child_name) + (1 | Trials),
+#   family = binomial, control = control_params)
+
+df_list <- list()
+for (p in 1:nrow(filtered_result)){
+  sub_TD <- TD[unlist(sam_num[filtered_result$ID[p]]), ]
+  df <- bind_rows(b1, b2, b3) |> 
+    dplyr::filter(Child_name %in% AS$Child_name | Child_name %in% sub_TD$Child_name) |>
+    dplyr::filter(Syntax_production %in% c("ba", "zh", "be")) %>%
+    left_join(., basic, by = c("Sub_id", "Child_name")) %>%
+    left_join(., Rating.df.mean, by = "Rate_ID") |>
+    dplyr::select(-Group.y, -Task_Data, -Birth_data) %>%
+    dplyr::select(Child_name, Sex, Age, everything()) |>
+    dplyr::mutate(
+      Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be")),
+      Trials = factor(Trials),
+      Child_name = factor(Child_name),
+      Group.x = factor(Group.x, levels = c("TDC", "ASD")),
+      Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be"))
+      ) |>
+    rename(Group = Group.x)
+  
+   df.mean <- df |>
+     group_by(Group, Syntax_prime) |>
+     summarise(Syntax = mean(Syntax_ACC)) |>
+     ungroup() |>
+     as.data.frame()
+   df_list[[p]] <- df.mean
+  }
+
+syn_diff <- purrr::map_df(1:length(df_list), ~ {
+  current_df <- df_list[[.x]]
+  data.frame(diff = mean(current_df[1:3, 3]) - mean(current_df[4:6, 3]),
+             index = .x)
+})
+
+be_diff <- purrr::map_df(1:length(df_list), ~ {
+  current_df <- df_list[[.x]]
+  data.frame(diff = current_df[3, 3] - current_df[6, 3],
+             index = .x)
+})
+
+ba_diff <- purrr::map_df(1:length(df_list), ~ {
+  current_df <- df_list[[.x]]
+  data.frame(diff = current_df[2, 3] - current_df[5, 3],
+             index = .x)
+})
+
+zh_diff <- purrr::map_df(1:length(df_list), ~ {
+  current_df <- df_list[[.x]]
+  data.frame(diff = current_df[1, 3] - current_df[4, 3],
+             index = .x)
+})
+
+```
+
+
+
+
+
+```{r 评分和实验合并}
+
+
+```
+
+
+```{r}
+b1 <- rio::import("./data/Result0915.xlsx", which = "Block1")
+b2 <- rio::import("./data/Result0915.xlsx", which = "Block2")
+b3 <- rio::import("./data/Result0915.xlsx", which = "Block3")
+basic <- rio::import("./data/Result0915.xlsx", which = "basic")
+df <- bind_rows(b1, b2, b3) |>
+  filter(Child_name %in% c(TD_new$Child_name, AS$Child_name)) %>%
+  dplyr::filter(Sen_ACC == 1, Syntax_production %in% c("ba", "zh", "be")) %>%
+  left_join(., basic, by = c("Sub_id", "Child_name")) %>%
+  dplyr::select(-Group.y, -Task_Data, -Birth_data) %>%
+  dplyr::select(Child_name, Sex, Age, everything()) %>%
+  dplyr::mutate(
+    Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be")),
+    Trials = factor(Trials),
+    Child_name = factor(Child_name),
+    Group.x = factor(Group.x, levels = c("TDC", "ASD")),
+    Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be"))
+  ) |>
+  rename(Group = Group.x)
+```
+
+```{r}
+control_params <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+contrasts(df$Group) <- contr.treatment(2)
+contrasts(df$Syntax_prime)<-contr.treatment(3)
+model.1 <- lme4::glmer(
+  data = df,
+  Syntax_ACC ~Syntax_prime * Group + (1| Child_name) + (1 | Trials),
+  family = binomial, control = control_params)
+
+poc.gro <- emmeans(model.1, ~ Group, contr = "pairwise", adjust = "bonferroni")
+poc.syn <- emmeans(model.1, ~ Syntax_prime, contr = "pairwise", adjust = "bonferroni")
+poc.int <- emmeans(model.1, ~  Group | Syntax_prime, contr = "pairwise", 
+                   adjust = "bonferroni")
+
+```
+
+
+
+
+
+```{r}
+model1 <- mclogit::mblogit(formula = Syntax_production ~ Syntax_prime * Group, 
+                 random = list( ~ 1 |Child_name, ~ 1 | Trials), data = df)
+```
+
+
+
+```{r import data}
+b1 <- rio::import("./data/Result0915.xlsx", which = "Block1")
+b2 <- rio::import("./data/Result0915.xlsx", which = "Block2")
+b3 <- rio::import("./data/Result0915.xlsx", which = "Block3")
+basic <- rio::import("./data/Result0915.xlsx", which = "basic")
+
+df <- bind_rows(b1, b2, b3)
+
+df1 <- df %>%
+  dplyr::filter(Sen_ACC == 1,
+                Child_name != "JSM",
+                Syntax_production %in% c("ba", "zh", "be")) %>%
+  merge(basic, by = "Child_name") %>%
+  dplyr::select(-contains(".x"), -contains(".y"), -Task_Data, -Birth_data) %>%
+  dplyr::select(Child_name, Sex, Age, everything()) %>%
+  dplyr::mutate(
+    Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be")),
+    Trials = factor(Trials),
+    Child_name = factor(Child_name),
+    Group = factor(Group, levels = c("TDC", "ASD")),
+    Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be"))
+  )
+df1$AGE <- (df1$Age - mean(df1$Age)) / sd(df1$Age)
+```
+
+```{r 句法协同检验}
+#找到zh条件下正确率特别低的被试删掉
+DF1 <- df %>%
+  group_by(Child_name, Syntax_prime)%>%
+  summarise(Syntax_align = mean(Syntax_ACC))%>%
+  ungroup()%>%
+  dplyr::filter(Syntax_prime == "zh" & Syntax_align < 0.5)%>%
+  pull(Child_name)
+
+DF2 <- df %>% 
+  dplyr::filter(!Child_name %in% DF1 & Sen_ACC == 1)%>%
+  merge(basic, by = "Child_name") %>%
+  dplyr::select(-contains(".x"), -contains(".y"), -Task_Data, -Birth_data) %>%
+  dplyr::select(Child_name, Sex, Age, everything())%>%
+  dplyr::mutate(Group = factor(Group, levels = c("ASD", "TDC")),
+                Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be")),
+                age = scale(Age, center = TRUE, scale = TRUE))%>%
+  dplyr::filter(Group == "ASD")
+```
+
+```{r}
+control_params <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model.1 <- lme4::glmer(
+  data = DF2,
+  Syntax_ACC ~ Syntax_prime + (1| Child_name) + (1 | Trials),
+  family = binomial, control = control_params)
+poc.test <- emmeans(model.1, ~ Syntax_prime, contr = "pairwise", adjust = "bonferroni")
+```
+
+
+```{r 句法协同图}
+#DF2.1 = DF2
+df$predition = predict(model.1, type = "response")
+fig2.1 <- ggplot(df, aes(x = Syntax_prime, y = predition, color = Syntax_prime)) +
+  geom_quasirandom(size = 2.5, width = 0.20) +
+  scale_color_manual(
+    values = c("#AF0F11", "#3372A6", "#367B34"),
+    labels = c("Active", "Ba", "Passive")  # 移除 name = NULL，改用 theme 控制
+  ) +
+  scale_x_discrete(labels = c("Active", "Ba", "Passive")) +
+  theme_test() +
+  labs(x = NULL, y = "Prediction") + 
+  scale_y_continuous(limits = c(0, 1.3),
+                     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)) +
+  geom_segment(aes(
+    x = 2,
+    y = 1.15,
+    xend = 3,
+    yend = 1.15
+  ),
+  linewidth = 0.4,
+  color = "black") +
+  geom_segment(aes(
+    x = 1,
+    y = 1.25,
+    xend = 3,
+    yend = 1.25
+  ),
+  linewidth = 0.4,
+  color = "black") +
+  annotate(geom = "text",
+           x = 2.5,
+           y = 1.2,
+           label = "p < 0.01") +
+  annotate(geom = "text",
+           x = 2,
+           y = 1.3,
+           label = "p < 0.01") +
+  theme(
+    axis.text.y = element_text(size = 12, color = 'black'),
+    axis.text.x = element_text(size = 12, color = 'black'),
+    axis.title.y = element_text(size = 13, color = 'black'),
+    legend.position = "none"
+  )
+fig2.1
+
+ggsave(
+  "./figure/fig2.1.pdf",
+  device = cairo_pdf,
+  width = 6,
+  height = 4
+)
+# DF2.2 <- DF2.1 %>% group_by(Group, Child_name, Syntax_prime)%>%
+#   summarise(value = mean(Syntax_ACC))
+```
+
+
+```{r 说错的时候喜欢说什么}
+#非协同且语义正确时每一种启动中，都说成了什么句法结构
+#主动句主要说成把字句，
+#把字句主要说成主动句
+#被字句主要说成把字句和主动句
+DFbe <- DF2 %>% 
+  dplyr::filter(Syntax_prime == "be" & Syntax_ACC == 0)%>%
+  group_by(Syntax_production)%>%
+  summarise(count = n())
+
+DFba <- DF2 %>% 
+  dplyr::filter(Syntax_prime == "ba" & Syntax_ACC == 0)%>%
+  group_by(Syntax_production)%>%
+  summarise(count = n())
+
+DFzh <- DF2 %>% 
+  dplyr::filter(Syntax_prime == "zh" & Syntax_ACC == 0)%>%
+  group_by(Syntax_production)%>%
+  summarise(count = n())
+
+#语义错误的启动分类,卡方显示并不存在某种句法下诱导不出来
+DF3 <- df %>% 
+  dplyr::filter(!Child_name %in% DF1)%>%
+  merge(basic, by = "Child_name") %>%
+  dplyr::select(-contains(".x"), -contains(".y"), -Task_Data, -Birth_data) %>%
+  dplyr::select(Child_name, Sex, Age, everything())%>%
+  dplyr::mutate(Group = factor(Group, levels = c("ASD", "TDC")),
+                Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be")),
+                age = scale(Age, center = TRUE, scale = TRUE))%>%
+  dplyr::filter(Group == "ASD")%>%
+  filter(Sen_ACC == 0) %>% 
+  group_by(Syntax_prime) %>% 
+  summarise(n =n())
+predice.value = c(1/3, 1/3, 1/3)
+chisq.test(x = DF3$n, p = predice.value)
+```
+
+
+```{r}
+DF2.2 <- DF2.1 %>% group_by(Group, Child_name, Syntax_prime)%>%
+  summarise(value = mean(Syntax_ACC))
+ff <- bruceR::MANOVA(data = DF2.2, dv = "value", within = "Syntax_prime", subID = "Child_name")
+emmeans(ff, ~ Syntax_prime, contr = "pairwise")
+```
+
+
+```{r brms}
+model.1 <- brm(
+  Syntax_production ~ Syntax_prime * Group + (1 |Trials) + (1 | Child_name),
+  data = df1,
+  init = 0,
+  family = categorical(link = "logit"),
+  chains = 4,
+  warmup = 1000,
+  iter = 5000,
+  thin = 1,
+  cores = 4
+)
+```
+
+```{r 多元逻辑回归}
+model1 <- mclogit::mblogit(formula = Syntax_production ~ Syntax_prime * Group, 
+                 random = list( ~ 1 |Child_name, ~ 1 | Trials), data = df1)
+
+model1 <- mclogit::mblogit(formula = Syntax_production ~ Syntax_prime * Group, 
+                 random = list( ~ 1|Child_name, ~ 1|Trials), data = df1,
+                 method=c("PQL"), estimator=c("ML"))
+```
+
+
+
+
