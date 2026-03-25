@@ -1,3 +1,0 @@
-"0","chayi3.pos <- posterior_predict(chayi3.bayes)"
-"0","chayi3.hdi <- bayestestR::hdi(chayi3.bayes)"
-"0","df_hb$predict = predict(chayi3.bayes, type = ""response"")[, 1]"

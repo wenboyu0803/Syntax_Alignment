@@ -1,5 +1,0 @@
-"0","chayi3.b <- mcmc_plot(chayi3.bayes, "
-"0","                      variable = c(""b_词类结果动补"","
-"0","                                   ""b_组别ASD""),"
-"0","                      type = ""areas"", prob = 0.95)"
-"0","chayi3.b"

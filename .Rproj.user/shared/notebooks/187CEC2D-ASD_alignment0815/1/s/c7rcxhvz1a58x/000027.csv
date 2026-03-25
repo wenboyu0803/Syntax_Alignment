@@ -1,3 +1,0 @@
-"0","jg3.pos <- posterior_predict(jg3.bayes)"
-"0","jg3.hdi <- bayestestR::hdi(jg3.bayes)"
-"0","dfjg$predict = predict(jg3.bayes, type = ""response"")[, 1]"

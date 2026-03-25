@@ -70,8 +70,8 @@ basic <- rio::import("./data/Result1002.xlsx", which = "basic") %>%
          PPVTZ = scale(PPVT)[, 1])
 df <- bind_rows(b1, b2, b3)
 
-quxiang <- c("举起", "穿上", "摘下", "放下", "扔掉", "挂起") 
-jieguo <- c("关掉", "吃掉", "喝掉", "打破", "打碎", 
+quxiang <- c("举起", "穿上", "摘下", "放下", "扔掉", "挂起","踢飞") 
+jieguo <- c("关掉", "吃掉", "喝掉", "打破", "打碎", "关上",
             "拔掉", "摔坏", "洗净", "踩坏", "撕掉")
 
 df01 <- df %>%
@@ -104,8 +104,6 @@ qxpingfen <- df01 |>
                 #Syntax_production == "be"
                 )
 pf_df <- rbind(jgpingfen, qxpingfen) 
-
-
 
 # pf.df <- rbind(jgpingfen, qxpingfen) |> group_by(Child_name, Group, Syntax_production, Syntax_prime, 词类)|>
 #   summarise(mean = mean(Rating.mean))
@@ -254,335 +252,650 @@ ggsave("./figure/fig4.svg", plot = fig4, width = 7, height = 5)
 ggsave("./figure/fig4.png", plot = fig4, width = 7, height = 5)
 ```
 
-
-
-```{r 趋向动补模型建立和比较}
-dfqx <- df01 |> 
-  dplyr::filter(词类 == "趋向动补") %>%
+```{r 把数据整理和模型}
+dfba <- df01 |> 
+  dplyr::filter(Syntax_prime != "be") %>%
   dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be")),
                 Trials = factor(Trials),
                 Child_name = factor(Child_name),
                 Group = factor(Group, levels = c("TDC", "ASD")),
-                Syntax_align = ifelse(Syntax_production == "be", 1, 0),
-                Syntax_prime = factor(Syntax_prime, levels = c("be", "ba", "zh")))
+                Syntax_align = ifelse(Syntax_production == "ba", 1, 0))
 
-qx1.bayes <- brm(
-  Syntax_align ~ Syntax_prime + Group + (1| Child_name) + (1 | Trials),
-  data = dfqx,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-qx2.bayes <- brm(
-  Syntax_align ~ Syntax_prime * Group + (1| Child_name) + (1 | Trials),
-  data = dfqx,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-qx3.bayes <- brm(
-  Syntax_align ~ Syntax_prime + Group + PPVTZ + (1| Child_name) + (1 | Trials),
-  data = dfqx,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-qx4.bayes <- brm(
-  Syntax_align ~ Syntax_prime * Group + PPVTZ + (1| Child_name) + (1 | Trials),
-  data = dfqx,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-looqx1 <- LOO(qx1.bayes)
-looqx2 <- LOO(qx2.bayes)
-looqx3 <- LOO(qx3.bayes)
-looqx4 <- LOO(qx4.bayes)
-brms::loo_compare(looqx1, looqx2, looqx3, looqx4)
-
-qx1.pp.mae <- posterior_predict(qx1.bayes)
-qx2.pp.mae <- posterior_predict(qx2.bayes)
-qx3.pp.mae <- posterior_predict(qx3.bayes)
-qx4.pp.mae <- posterior_predict(qx4.bayes)
-qx1.mae <- median(abs(apply(qx1.pp.mae, 2, mean) - dfqx[, 28]))
-qx2.mae <- median(abs(apply(qx2.pp.mae, 2, mean) - dfqx[, 28]))
-qx3.mae <- median(abs(apply(qx3.pp.mae, 2, mean) - dfqx[, 28]))
-qx4.mae <- median(abs(apply(qx4.pp.mae, 2, mean) - dfqx[, 28]))
+models_ba <- list(
+  pf1 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
+  pf2 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + PPVTZ + (1| Trials),
+  pf3 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + (1| Child_name),
+  pf4 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + PPVTZ,
+  pf5 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + (1| Trials) +(1| Child_name),
+  pf6 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + (1| Trials),
+  pf7 = Syntax_align ~ 1 + Syntax_prime * Group * 词类+ (1| Child_name),
+  pf8 = Syntax_align ~ 1 + Syntax_prime * Group * 词类,
+  pf9 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
+  pf10 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + PPVTZ + (1| Trials),
+  pf11 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + (1| Child_name),
+  pf12 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + PPVTZ,
+  pf13 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + (1| Trials) +(1| Child_name),
+  pf14 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + (1| Trials),
+  pf15 = Syntax_align ~ 1 + Syntax_prime * Group + 词类+ (1| Child_name),
+  pf16 = Syntax_align ~ 1 + Syntax_prime * Group + 词类,
+  pf17 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
+  pf18 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + PPVTZ + (1| Trials),
+  pf19 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + (1| Child_name),
+  pf20 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + PPVTZ,
+  pf21 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + (1| Trials) +(1| Child_name),
+  pf22 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + (1| Trials),
+  pf23 = Syntax_align ~ 1 + Syntax_prime + Group + 词类+ (1| Child_name),
+  pf24 = Syntax_align ~ 1 + Syntax_prime + Group + 词类
+ ) 
 ```
 
+```{r 把模型建立和比较}
+ba_objects <- list()
+ba_summaries <- list ()
+for (model_name in names(models_ba)) {
+  formula <- models_ba[[model_name]]
+  model <- brm(
+    formula = formula,
+    data = dfba ,
+    family = bernoulli(link = "logit"),
+    init = 0,
+    chains = 4,
+    warmup = 1000,
+    iter = 5000,
+    thin = 1,
+    cores = 4)
 
+  ba_objects[[model_name]] <- model
+  ba_summaries[[model_name]] <- summary(model)
+}
+```
 
+```{r 把模型比较}
+loo_ba <- list()
+for (model_name in names(ba_objects)) {
+  loo_ba[[model_name]] <- LOO(ba_objects[[model_name]])
+}
+ba.compare <- brms::LOO(
+  ba_objects$pf1,
+  ba_objects$pf2,
+  ba_objects$pf3,
+  ba_objects$pf4,
+  ba_objects$pf5,
+  ba_objects$pf6,
+  ba_objects$pf7,
+  ba_objects$pf8,
+  ba_objects$pf9,
+  ba_objects$pf10,
+  ba_objects$pf11,
+  ba_objects$pf12,
+  ba_objects$pf13,
+  ba_objects$pf14,
+  ba_objects$pf15,
+  ba_objects$pf16,
+  ba_objects$pf17,
+  ba_objects$pf18,
+  ba_objects$pf19,
+  ba_objects$pf20,
+  ba_objects$pf21,
+  ba_objects$pf22,
+  ba_objects$pf23,
+  ba_objects$pf24
+)
+#bayestestR::hdi(ba_objects$pf21)
 
-```{r 趋向动补贝叶斯模型拟合} 
-qx3_trace <- bayesplot::mcmc_trace(qx3.bayes,
-                                   pars = c("b_Syntax_primeba",
-                                            "b_Syntax_primezh",
-                                            "b_GroupASD",
-                                            "b_PPVTZ")) +
+ba1.mae <- posterior_predict(ba_objects$pf1)
+ba2.mae <- posterior_predict(ba_objects$pf2)
+ba3.mae <- posterior_predict(ba_objects$pf3)
+ba4.mae <- posterior_predict(ba_objects$pf4)
+ba5.mae <- posterior_predict(ba_objects$pf5)
+ba6.mae <- posterior_predict(ba_objects$pf6)
+ba7.mae <- posterior_predict(ba_objects$pf7)
+ba8.mae <- posterior_predict(ba_objects$pf8)
+ba9.mae <- posterior_predict(ba_objects$pf9)
+ba10.mae <- posterior_predict(ba_objects$pf10)
+ba11.mae <- posterior_predict(ba_objects$pf11)
+ba12.mae <- posterior_predict(ba_objects$pf12)
+ba13.mae <- posterior_predict(ba_objects$pf13)
+ba14.mae <- posterior_predict(ba_objects$pf14)
+ba15.mae <- posterior_predict(ba_objects$pf15)
+ba16.mae <- posterior_predict(ba_objects$pf16)
+ba17.mae <- posterior_predict(ba_objects$pf17)
+ba18.mae <- posterior_predict(ba_objects$pf18)
+ba19.mae <- posterior_predict(ba_objects$pf19)
+ba20.mae <- posterior_predict(ba_objects$pf20)
+ba21.mae <- posterior_predict(ba_objects$pf21)
+ba22.mae <- posterior_predict(ba_objects$pf22)
+ba23.mae <- posterior_predict(ba_objects$pf23)
+ba24.mae <- posterior_predict(ba_objects$pf24)
+
+ba1 <- median(abs(apply(ba1.mae, 2, mean) - dfba[, 28]))
+ba2 <- median(abs(apply(ba2.mae, 2, mean) - dfba[, 28]))
+ba3 <- median(abs(apply(ba3.mae, 2, mean) - dfba[, 28]))
+ba4 <- median(abs(apply(ba4.mae, 2, mean) - dfba[, 28]))
+ba5 <- median(abs(apply(ba5.mae, 2, mean) - dfba[, 28]))
+ba6 <- median(abs(apply(ba6.mae, 2, mean) - dfba[, 28]))
+ba7 <- median(abs(apply(ba7.mae, 2, mean) - dfba[, 28]))
+ba8 <- median(abs(apply(ba8.mae, 2, mean) - dfba[, 28]))
+ba9 <- median(abs(apply(ba9.mae, 2, mean) - dfba[, 28]))
+ba10 <- median(abs(apply(ba10.mae, 2, mean) - dfba[, 28]))
+ba11 <- median(abs(apply(ba11.mae, 2, mean) - dfba[, 28]))
+ba12 <- median(abs(apply(ba12.mae, 2, mean) - dfba[, 28]))
+ba13 <- median(abs(apply(ba13.mae, 2, mean) - dfba[, 28]))
+ba14 <- median(abs(apply(ba14.mae, 2, mean) - dfba[, 28]))
+ba15 <- median(abs(apply(ba15.mae, 2, mean) - dfba[, 28]))
+ba16 <- median(abs(apply(ba16.mae, 2, mean) - dfba[, 28]))
+ba17 <- median(abs(apply(ba17.mae, 2, mean) - dfba[, 28]))
+ba18 <- median(abs(apply(ba18.mae, 2, mean) - dfba[, 28]))
+ba19 <- median(abs(apply(ba19.mae, 2, mean) - dfba[, 28]))
+ba20 <- median(abs(apply(ba20.mae, 2, mean) - dfba[, 28]))
+ba21 <- median(abs(apply(ba21.mae, 2, mean) - dfba[, 28]))
+ba22 <- median(abs(apply(ba22.mae, 2, mean) - dfba[, 28]))
+ba23 <- median(abs(apply(ba23.mae, 2, mean) - dfba[, 28]))
+ba24 <- median(abs(apply(ba24.mae, 2, mean) - dfba[, 28]))
+```
+
+```{r 把模型拟合}
+ba21_trace <- bayesplot::mcmc_trace(ba_objects$pf21,
+                                    pars = c("b_Syntax_primeba",
+                                             "b_GroupASD",
+                                             "b_词类结果动补")) +
   theme(legend.text = element_text(size = 8),
         legend.title = element_text(size = 10),
         legend.margin = margin(1, 1, 1, 1, "pt"),
         legend.key.size = unit(1, "lines"),
         legend.key.height = unit(1, "lines")) +
   guides(color = guide_legend(override.aes = list(size = 0.5)))
-qx3_trace
-#ggsave(plot = trace_noeff, "./figure/trace_noeff.svg", width = 6, height = 4)
+ba21_trace
+ggsave(plot = ba21_trace, "./figure/ba21_trace.svg", width = 10, height = 4)
 
-qx3.ppcheck <- pp_check(qx3.bayes, ndraws = 100)
-qx3.ppcheck 
-qx3.b <- mcmc_plot(qx3.bayes, 
-                   variable = c("b_Syntax_primeba",
-                                "b_Syntax_primezh",
-                                "b_GroupASD",
-                                "b_PPVTZ"),
-                   type = "areas", prob = 0.95)
-qx3.b
-qx3.pos <- posterior_predict(qx3.bayes)
-qx3.hdi <- bayestestR::hdi(qx3.bayes)
-dfqx$predict = predict(qx3.bayes, type = "response")[, 1]
+ba21.ppcheck <- pp_check(ba_objects$pf21, ndraws = 100)
+ba21.ppcheck 
+ba21.b <- mcmc_plot(ba_objects$pf21, 
+                    variable = c("b_Syntax_primeba", 
+                                 "b_GroupASD", 
+                                 "b_词类结果动补"),
+                    type = "areas", prob = 0.95)
+ba21.b
+ba21.pos <- posterior_predict(ba_objects$pf21)
+ba21.hdi <- bayestestR::hdi(ba_objects$pf21)
+dfba$predict = predict(ba_objects$pf21, type = "response")[, 1]
 ```
 
 
-```{r 结果动补模型建立建立}
-dfjg <- df01 |> 
-  dplyr::filter(词类 != "趋向动补") %>%
+```{r 被数据整理和模型}
+dfbe <- df01 |> 
+  dplyr::filter(Syntax_prime != "ba") %>%
   dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be")),
                 Trials = factor(Trials),
                 Child_name = factor(Child_name),
                 Group = factor(Group, levels = c("TDC", "ASD")),
-                Syntax_align = ifelse(Syntax_production == "zh", 1, 0),
-                Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be")))
+                Syntax_align = ifelse(Syntax_production == "be", 1, 0))
 
-jg1.bayes <- brm(
-  Syntax_align ~ Syntax_prime + Group + (1| Child_name) + (1 | Trials),
-  data = dfjg,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-jg2.bayes <- brm(
-  Syntax_align ~ Syntax_prime * Group + (1| Child_name) + (1 | Trials),
-  data = dfjg,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-jg3.bayes <- brm(
-  Syntax_align ~ Syntax_prime + Group + PPVTZ + (1| Child_name) + (1 | Trials),
-  data = dfjg,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-jg4.bayes <- brm(
-  Syntax_align ~ Syntax_prime * Group + PPVTZ + (1| Child_name) + (1 | Trials),
-  data = dfjg,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-loojg1 <- LOO(jg1.bayes)
-loojg2 <- LOO(jg2.bayes)
-loojg3 <- LOO(jg3.bayes)
-loojg4 <- LOO(jg4.bayes)
-brms::loo_compare(loojg1, loojg2, loojg3, loojg4)
-
-jg1.pp.mae <- posterior_predict(jg1.bayes)
-jg2.pp.mae <- posterior_predict(jg2.bayes)
-jg3.pp.mae <- posterior_predict(jg3.bayes)
-jg4.pp.mae <- posterior_predict(jg4.bayes)
-jg1.mae <- median(abs(apply(jg1.pp.mae, 2, mean) - dfjg[, 28]))
-jg2.mae <- median(abs(apply(jg2.pp.mae, 2, mean) - dfjg[, 28]))
-jg3.mae <- median(abs(apply(jg3.pp.mae, 2, mean) - dfjg[, 28]))
-jg4.mae <- median(abs(apply(jg4.pp.mae, 2, mean) - dfjg[, 28]))
+models_be <- list(
+  pf1 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
+  pf2 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + PPVTZ + (1| Trials),
+  pf3 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + (1| Child_name),
+  pf4 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + PPVTZ,
+  pf5 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + (1| Trials) +(1| Child_name),
+  pf6 = Syntax_align ~ 1 + Syntax_prime * Group * 词类 + (1| Trials),
+  pf7 = Syntax_align ~ 1 + Syntax_prime * Group * 词类+ (1| Child_name),
+  pf8 = Syntax_align ~ 1 + Syntax_prime * Group * 词类,
+  pf9 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
+  pf10 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + PPVTZ + (1| Trials),
+  pf11 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + (1| Child_name),
+  pf12 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + PPVTZ,
+  pf13 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + (1| Trials) +(1| Child_name),
+  pf14 = Syntax_align ~ 1 + Syntax_prime * Group + 词类 + (1| Trials),
+  pf15 = Syntax_align ~ 1 + Syntax_prime * Group + 词类+ (1| Child_name),
+  pf16 = Syntax_align ~ 1 + Syntax_prime * Group + 词类,
+  pf17 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
+  pf18 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + PPVTZ + (1| Trials),
+  pf19 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + (1| Child_name),
+  pf20 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + PPVTZ,
+  pf21 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + (1| Trials) +(1| Child_name),
+  pf22 = Syntax_align ~ 1 + Syntax_prime + Group + 词类 + (1| Trials),
+  pf23 = Syntax_align ~ 1 + Syntax_prime + Group + 词类+ (1| Child_name),
+  pf24 = Syntax_align ~ 1 + Syntax_prime + Group + 词类
+ ) 
 ```
 
+```{r 被模型建立和比较}
+be_objects <- list()
+be_summaries <- list ()
+for (model_name in names(models_be)) {
+  formula <- models_be[[model_name]]
+  model <- brm(
+    formula = formula,
+    data = dfbe,
+    family = bernoulli(link = "logit"),
+    init = 0,
+    chains = 4,
+    warmup = 1000,
+    iter = 5000,
+    thin = 1,
+    cores = 4)
 
-```{r 结果动补贝叶斯模型拟合}
-jg3_trace <- bayesplot::mcmc_trace(jg3.bayes,
-                                   pars = c("b_Syntax_primeba",
-                                            "b_Syntax_primebe",
-                                            "b_GroupASD",
-                                            "b_PPVTZ")) +
+  be_objects[[model_name]] <- model
+  be_summaries[[model_name]] <- summary(model)
+}
+```
+
+```{r 被模型比较}
+loo_be <- list()
+for (model_name in names(be_objects)) {
+  loo_be[[model_name]] <- LOO(be_objects[[model_name]])
+}
+be.compare <- brms::LOO(
+  be_objects$pf1,
+  be_objects$pf2,
+  be_objects$pf3,
+  be_objects$pf4,
+  be_objects$pf5,
+  be_objects$pf6,
+  be_objects$pf7,
+  be_objects$pf8,
+  be_objects$pf9,
+  be_objects$pf10,
+  be_objects$pf11,
+  be_objects$pf12,
+  be_objects$pf13,
+  be_objects$pf14,
+  be_objects$pf15,
+  be_objects$pf16,
+  be_objects$pf17,
+  be_objects$pf18,
+  be_objects$pf19,
+  be_objects$pf20,
+  be_objects$pf21,
+  be_objects$pf22,
+  be_objects$pf23,
+  be_objects$pf24
+)
+
+be1.mae <- posterior_predict(be_objects$pf1)
+be2.mae <- posterior_predict(be_objects$pf2)
+be3.mae <- posterior_predict(be_objects$pf3)
+be4.mae <- posterior_predict(be_objects$pf4)
+be5.mae <- posterior_predict(be_objects$pf5)
+be6.mae <- posterior_predict(be_objects$pf6)
+be7.mae <- posterior_predict(be_objects$pf7)
+be8.mae <- posterior_predict(be_objects$pf8)
+be9.mae <- posterior_predict(be_objects$pf9)
+be10.mae <- posterior_predict(be_objects$pf10)
+be11.mae <- posterior_predict(be_objects$pf11)
+be12.mae <- posterior_predict(be_objects$pf12)
+be13.mae <- posterior_predict(be_objects$pf13)
+be14.mae <- posterior_predict(be_objects$pf14)
+be15.mae <- posterior_predict(be_objects$pf15)
+be16.mae <- posterior_predict(be_objects$pf16)
+be17.mae <- posterior_predict(be_objects$pf17)
+be18.mae <- posterior_predict(be_objects$pf18)
+be19.mae <- posterior_predict(be_objects$pf19)
+be20.mae <- posterior_predict(be_objects$pf20)
+be21.mae <- posterior_predict(be_objects$pf21)
+be22.mae <- posterior_predict(be_objects$pf22)
+be23.mae <- posterior_predict(be_objects$pf23)
+be24.mae <- posterior_predict(be_objects$pf24)
+
+be1 <- median(abs(apply(be1.mae, 2, mean) - dfbe[, 28]))
+be2 <- median(abs(apply(be2.mae, 2, mean) - dfbe[, 28]))
+be3 <- median(abs(apply(be3.mae, 2, mean) - dfbe[, 28]))
+be4 <- median(abs(apply(be4.mae, 2, mean) - dfbe[, 28]))
+be5 <- median(abs(apply(be5.mae, 2, mean) - dfbe[, 28]))
+be6 <- median(abs(apply(be6.mae, 2, mean) - dfbe[, 28]))
+be7 <- median(abs(apply(be7.mae, 2, mean) - dfbe[, 28]))
+be8 <- median(abs(apply(be8.mae, 2, mean) - dfbe[, 28]))
+be9 <- median(abs(apply(be9.mae, 2, mean) - dfbe[, 28]))
+be10 <- median(abs(apply(be10.mae, 2, mean) - dfbe[, 28]))
+be11 <- median(abs(apply(be11.mae, 2, mean) - dfbe[, 28]))
+be12 <- median(abs(apply(be12.mae, 2, mean) - dfbe[, 28]))
+be13 <- median(abs(apply(be13.mae, 2, mean) - dfbe[, 28]))
+be14 <- median(abs(apply(be14.mae, 2, mean) - dfbe[, 28]))
+be15 <- median(abs(apply(be15.mae, 2, mean) - dfbe[, 28]))
+be16 <- median(abs(apply(be16.mae, 2, mean) - dfbe[, 28]))
+be17 <- median(abs(apply(be17.mae, 2, mean) - dfbe[, 28]))
+be18 <- median(abs(apply(be18.mae, 2, mean) - dfbe[, 28]))
+be19 <- median(abs(apply(be19.mae, 2, mean) - dfbe[, 28]))
+be20 <- median(abs(apply(be20.mae, 2, mean) - dfbe[, 28]))
+be21 <- median(abs(apply(be21.mae, 2, mean) - dfbe[, 28]))
+be22 <- median(abs(apply(be22.mae, 2, mean) - dfbe[, 28]))
+be23 <- median(abs(apply(be23.mae, 2, mean) - dfbe[, 28]))
+be24 <- median(abs(apply(be24.mae, 2, mean) - dfbe[, 28]))
+```
+
+```{r 被模型拟合}
+be19_trace <- bayesplot::mcmc_trace(be_objects$pf19,
+                                    pars = c("b_Syntax_primebe",
+                                             "b_GroupASD",
+                                             "b_词类结果动补")) +
   theme(legend.text = element_text(size = 8),
         legend.title = element_text(size = 10),
         legend.margin = margin(1, 1, 1, 1, "pt"),
         legend.key.size = unit(1, "lines"),
         legend.key.height = unit(1, "lines")) +
   guides(color = guide_legend(override.aes = list(size = 0.5)))
-jg3_trace
-#ggsave(plot = trace_noeff, "./figure/trace_noeff.svg", width = 6, height = 4)
+be19_trace
+ggsave(plot = be19_trace, "./figure/be19_trace.svg", width = 10, height = 4)
 
-jg3.ppcheck <- pp_check(jg3.bayes, ndraws = 100)
-jg3.ppcheck 
-jg3.b <- mcmc_plot(jg3.bayes, 
-                   variable = c("b_Syntax_primeba",
-                                "b_Syntax_primebe",
-                                "b_GroupASD",
-                                "b_PPVTZ"),
-                   type = "areas", prob = 0.95)
-jg3.b
-jg3.pos <- posterior_predict(jg3.bayes)
-jg3.hdi <- bayestestR::hdi(jg3.bayes)
-dfjg$predict = predict(jg3.bayes, type = "response")[, 1]
+be19.ppcheck <- pp_check(be_objects$pf19, ndraws = 100)
+be19.ppcheck 
+be19.b <- mcmc_plot(be_objects$pf19, 
+                    variable = c("b_Syntax_primebe", 
+                                 "b_GroupASD", 
+                                 "b_词类结果动补"),
+                    type = "areas", prob = 0.95)
+be19.b
+be19.pos <- posterior_predict(be_objects$pf19)
+be19.hdi <- bayestestR::hdi(be_objects$pf19)
+dfbe$predict = predict(be_objects$pf19, type = "response")[, 1]
+```
+
+```{r 主动句把字句数据整理}
+dfba0 <- dfba |>
+  group_by(Child_name, Group, Syntax_prime) |>
+  summarise(可能性 = mean(Syntax_align)) |>
+  ungroup() |>
+  as.data.frame() |>
+  rename(组别 = Group, 句法结构 = "Syntax_prime")
+dfbe0 <- dfbe |>
+  group_by(Child_name, Group, Syntax_prime) |>
+  summarise(可能性 = mean(Syntax_align)) |>
+  ungroup() |>
+  as.data.frame() |>
+  rename(组别 = Group, 句法结构 = "Syntax_prime")
+```
+
+```{r 把字句主动句画图}
+dfba2 <- dfba0 %>% mutate(x_pos = case_when(句法结构 == "ba" ~ 1, 句法结构 == "zh" ~ 2))
+df_unique <- dfba2 %>%distinct(Child_name, 组别, 句法结构, 可能性, .keep_all = TRUE)
+
+ba_summary <- df_unique %>%
+  group_by(组别, 句法结构, x_pos) %>%
+  summarise(
+    均值 = mean(可能性),
+    标准差 = sd(可能性),
+    n = n(),
+    标准误 = 标准差 / sqrt(n),
+    CI_lower = 均值 - 1.96 * 标准误,
+    CI_upper = 均值 + 1.96 * 标准误,
+    .groups = 'drop')
+
+figba <- ggplot(ba_summary, aes(x = x_pos, y = 均值, fill = 组别)) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper),
+                position = position_dodge(0.75),
+                width = 0.1, color = "grey10", linewidth = 0.6) +
+  geom_col(alpha = 0.85, width = 0.70, position = position_dodge(0.75)) +
+  geom_point(data = df_unique, 
+             aes(x = x_pos, y = 可能性, color = 组别),
+             position = position_jitterdodge(jitter.width = 0.08, dodge.width = 0.65),
+             size = 2.5, alpha = 0.7, show.legend = FALSE) +
+  labs(y = "句法对齐", x = "句法结构", fill = "组别") +
+  theme_test() +
+  theme(axis.text.x = element_text(size = 12, face = "plain"),
+        axis.text.y = element_text(size = 12, face = "plain"),
+        axis.title.y = element_text(size = 12, face = "plain"),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.direction = "vertical",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12, face = "plain"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(5, 5, 5, 5)) +
+  scale_fill_manual(values = c("TDC" = "#B3742D", "ASD" = "#006654"),
+                    labels = c("TDC" = "TD儿童", "ASD" = "ASD儿童")) +
+  scale_color_manual(values = c("TDC" = "#B3742D", "ASD" = "#006654")) +
+  scale_x_continuous(
+    breaks = c(1, 2),
+    labels = c("把字句", "主动句"),
+    limits = c(0.5, 2.5),
+    expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2), 
+                     expand = expansion(mult = c(0, 0.05)))
+```
+
+```{r 主动句和被动句画图}
+dfbe2 <- dfbe0 %>% mutate(x_pos = case_when(句法结构 == "be" ~ 1, 句法结构 == "zh" ~ 2))
+df_unique <- dfbe2 %>%distinct(Child_name, 组别, 句法结构, 可能性, .keep_all = TRUE)
+
+be_summary <- df_unique %>%
+  group_by(组别, 句法结构, x_pos) %>%
+  summarise(
+    均值 = mean(可能性),
+    标准差 = sd(可能性),
+    n = n(),
+    标准误 = 标准差 / sqrt(n),
+    CI_lower = 均值 - 1.96 * 标准误,
+    CI_upper = 均值 + 1.96 * 标准误,
+    .groups = 'drop')
+
+figbe <- ggplot(be_summary, aes(x = x_pos, y = 均值, fill = 组别)) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper),
+                position = position_dodge(0.75),
+                width = 0.1, color = "grey10", linewidth = 0.6) +
+  geom_col(alpha = 0.85, width = 0.70, position = position_dodge(0.75)) +
+  geom_point(data = df_unique, 
+             aes(x = x_pos, y = 可能性, color = 组别),
+             position = position_jitterdodge(jitter.width = 0.08, dodge.width = 0.65),
+             size = 2.5, alpha = 0.7, show.legend = FALSE) +
+  labs(y = "句法对齐", x = "句法结构", fill = "组别") +
+  theme_test() +
+  theme(axis.text.x = element_text(size = 12, face = "plain"),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.direction = "vertical",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12, face = "plain"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(5, 5, 5, 5)) +
+  scale_fill_manual(values = c("TDC" = "#B3742D", "ASD" = "#006654"),
+                    labels = c("TDC" = "TD儿童", "ASD" = "ASD儿童")) +
+  scale_color_manual(values = c("TDC" = "#B3742D", "ASD" = "#006654"),
+                     labels = c("TDC" = "TD儿童", "ASD" = "ASD儿童")) +
+  scale_x_continuous(
+    breaks = c(1, 2),
+    labels = c("被字句", "主动句"),
+    limits = c(0.5, 2.5),
+    expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2), 
+                     expand = expansion(mult = c(0, 0.05)))
+
+babe_plot <- (figba + figbe) + 
+  plot_layout(
+    guides = "collect",
+    nrow = 1,
+    widths = c(1, 1)) &
+  theme(
+    legend.position = "right",
+    legend.justification = "center",
+    legend.box = "horizontal",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 11)
+  )
+print(babe_plot)
+ggsave("./figure/babe.svg", plot = babe_plot, width = 6.5, height = 4)
+ggsave("./figure/babe.png", plot = babe_plot, width = 6.5, height = 4)
 ```
 
 
-```{r 趋向动补协同和结果动补差异贝叶斯}
-dfqx1 <- dfqx |>
+```{r 把被联合分析数据整理}
+dfba1 <- dfba |>
   group_by(Child_name, Group, Syntax_prime, 词类) |>
   summarise(可能性 = mean(predict)) |>
   ungroup() |>
+  dplyr::filter(Syntax_prime == "ba") |>
   as.data.frame() |>
+  rename(组别 = Group, 句法结构 = "Syntax_prime")
+dfbe1 <- dfbe |>
+  group_by(Child_name, Group, Syntax_prime, 词类) |>
+  summarise(可能性 = mean(predict)) |>
+  ungroup() |>
   dplyr::filter(Syntax_prime == "be") |>
-  rename(组别 = Group, 句法结构 = "Syntax_prime")
-dfjg1 <- dfjg |>
-  group_by(Child_name, Group, Syntax_prime, 词类) |>
-  summarise(可能性 = mean(predict)) |>
-  ungroup() |>
   as.data.frame() |>
-  dplyr::filter(Syntax_prime == "zh") |>
   rename(组别 = Group, 句法结构 = "Syntax_prime")
-df_hb <- rbind(dfqx1, dfjg1) |> rbind(c("CHENGCHENG", "ASD", "be", "趋向动补", 0.001))|>
-  dplyr::mutate(可能性 = as.numeric(可能性))
+df_hb <- rbind(dfba1, dfbe1) |> dplyr::mutate(可能性 = as.numeric(可能性))
+```
 
-chayi1.bayes <- brm(
-  可能性 ~ 词类 + 组别 + (1| Child_name),
-  data = df_hb,
-  init = 0,
-  family = Beta(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-chayi2.bayes <- brm(
-  可能性 ~ 词类 * 组别 + (1| Child_name),
-  data = df_hb,
-  init = 0,
-  family = Beta(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-chayi3.bayes <- brm(
-  可能性 ~ 词类 + 组别,
-  data = df_hb,
-  init = 0,
-  family = Beta(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-chayi4.bayes <- brm(
-  可能性 ~ 词类 * 组别 + (1| Child_name),
-  data = df_hb,
-  init = 0,
-  family = Beta(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
+```{r 把被联合分析模型建立}
+models_lh <- list(
+  lh1 = 可能性 ~ 词类 + 句法结构 + 组别 + (1| Child_name),
+  lh2 = 可能性 ~ 词类 * 组别 + 句法结构 + (1| Child_name),
+  lh3 = 可能性 ~ 词类 * 句法结构 + 组别 + (1| Child_name),
+  lh4 = 可能性 ~ 句法结构 * 组别 + 词类 + (1| Child_name),
+  lh5 = 可能性 ~ 词类 + 句法结构 + 组别,
+  lh6 = 可能性 ~ 词类 * 组别 + 句法结构,
+  lh7 = 可能性 ~ 词类 * 句法结构 + 组别,
+  lh8 = 可能性 ~ 句法结构 * 组别 + 词类,
+  lh9 = 可能性 ~ 句法结构 * 组别 + (1| Child_name),
+  lh10 = 可能性 ~ 句法结构 + 组别 + (1| Child_name)
+ ) 
 
-loochayi1 <- LOO(chayi1.bayes)
-loochayi2 <- LOO(chayi2.bayes)
-loochayi3 <- LOO(chayi3.bayes)
-loochayi4 <- LOO(chayi4.bayes)
-brms::loo_compare(loochayi1, loochayi2, loochayi3, loochayi4)
+lh_objects <- list()
+lh_summaries <- list ()
+for (model_name in names(models_lh)) {
+  formula <- models_lh[[model_name]]
+  model <- brm(
+    formula = formula,
+    data = df_hb,
+    family = Beta(link = "logit"),
+    init = 0,
+    chains = 4,
+    warmup = 1000,
+    iter = 5000,
+    thin = 1,
+    cores = 4)
 
-chayi1.pp.mae <- posterior_predict(chayi1.bayes)
-chayi2.pp.mae <- posterior_predict(chayi2.bayes)
-chayi3.pp.mae <- posterior_predict(chayi3.bayes)
-chayi4.pp.mae <- posterior_predict(chayi4.bayes)
-chayi1.mae <- median(abs(apply(chayi1.pp.mae, 2, mean) - df_hb[, 5]))
-chayi2.mae <- median(abs(apply(chayi2.pp.mae, 2, mean) - df_hb[, 5]))
-chayi3.mae <- median(abs(apply(chayi3.pp.mae, 2, mean) - df_hb[, 5]))
-chayi4.mae <- median(abs(apply(chayi4.pp.mae, 2, mean) - df_hb[, 5]))
+  lh_objects[[model_name]] <- model
+  lh_summaries[[model_name]] <- summary(model)
+}
+```
 
-chayi3_trace <- bayesplot::mcmc_trace(chayi3.bayes,
-                                      pars = c("b_词类结果动补",
-                                               "b_组别ASD")) +
+```{r 联合分析模型比较和拟合}
+loo_lh <- list()
+for (model_name in names(lh_objects)) {
+  loo_lh[[model_name]] <- LOO(lh_objects[[model_name]])
+}
+lh.compare <- brms::LOO(
+  lh_objects$lh1,
+  lh_objects$lh2,
+  lh_objects$lh3,
+  lh_objects$lh4,
+  lh_objects$lh5,
+  lh_objects$lh6,
+  lh_objects$lh7,
+  lh_objects$lh8,
+  lh_objects$lh9,
+  lh_objects$lh10
+)
+
+lh1.mae <- posterior_predict(lh_objects$lh1)
+lh2.mae <- posterior_predict(lh_objects$lh2)
+lh3.mae <- posterior_predict(lh_objects$lh3)
+lh4.mae <- posterior_predict(lh_objects$lh4)
+lh5.mae <- posterior_predict(lh_objects$lh5)
+lh6.mae <- posterior_predict(lh_objects$lh6)
+lh7.mae <- posterior_predict(lh_objects$lh7)
+lh8.mae <- posterior_predict(lh_objects$lh8)
+lh9.mae <- posterior_predict(lh_objects$lh9)
+lh10.mae <- posterior_predict(lh_objects$lh10)
+
+lh1 <- median(abs(apply(lh1.mae, 2, mean) - df_hb[, 5]))
+lh2 <- median(abs(apply(lh2.mae, 2, mean) - df_hb[, 5]))
+lh3 <- median(abs(apply(lh3.mae, 2, mean) - df_hb[, 5]))
+lh4 <- median(abs(apply(lh4.mae, 2, mean) - df_hb[, 5]))
+lh5 <- median(abs(apply(lh5.mae, 2, mean) - df_hb[, 5]))
+lh6 <- median(abs(apply(lh6.mae, 2, mean) - df_hb[, 5]))
+lh7 <- median(abs(apply(lh7.mae, 2, mean) - df_hb[, 5]))
+lh8 <- median(abs(apply(lh8.mae, 2, mean) - df_hb[, 5]))
+lh9 <- median(abs(apply(lh9.mae, 2, mean) - df_hb[, 5]))
+lh10 <- median(abs(apply(lh10.mae, 2, mean) - df_hb[, 5]))
+
+
+chayi_trace <- bayesplot::mcmc_trace(lh_objects$lh3,
+                                     pars = c("b_词类结果动补",
+                                              "b_句法结构be",
+                                              "b_组别ASD",
+                                              "b_词类结果动补:句法结构be")) +
   theme(legend.text = element_text(size = 8),
         legend.title = element_text(size = 10),
         legend.margin = margin(1, 1, 1, 1, "pt"),
         legend.key.size = unit(1, "lines"),
         legend.key.height = unit(1, "lines")) +
   guides(color = guide_legend(override.aes = list(size = 0.5)))
-jg3_trace
-#ggsave(plot = trace_noeff, "./figure/trace_noeff.svg", width = 6, height = 4)
+chayi_trace
+ggsave(plot = chayi_trace, "./figure/chayi_trace.svg", width = 12, height = 4)
 
-chayi3.ppcheck <- pp_check(chayi3.bayes, ndraws = 100)
-chayi3.ppcheck 
-chayi3.b <- mcmc_plot(chayi3.bayes, 
-                      variable = c("b_词类结果动补",
-                                   "b_组别ASD"),
+chayi.ppcheck <- pp_check(lh_objects$lh3, ndraws = 100)
+chayi.ppcheck 
+chayi.b <- mcmc_plot(lh_objects$lh3,
+                     variable = c("b_词类结果动补",
+                                  "b_句法结构be",
+                                  "b_组别ASD",
+                                  "b_词类结果动补:句法结构be"),
                       type = "areas", prob = 0.95)
-chayi3.b
-chayi3.pos <- posterior_predict(chayi3.bayes)
-chayi3.hdi <- bayestestR::hdi(chayi3.bayes)
-df_hb$predict = predict(chayi3.bayes, type = "response")[, 1]
+chayi.b
+chayi.pos <- posterior_predict(lh_objects$lh3)
+chayi.hdi <- bayestestR::hdi(lh_objects$lh3)
+df_hb$predict = predict(lh_objects$lh3, type = "response")[, 1]
+```
+
+```{r 联合分析柱状图}
+df_hb <- df_hb %>%
+  mutate(
+    x_pos = case_when(
+      句法结构 == "ba" & 词类 == "趋向动补" ~ 1,
+      句法结构 == "ba" & 词类 == "结果动补" ~ 1.35,
+      句法结构 == "be" & 词类 == "趋向动补" ~ 2,
+      句法结构 == "be" & 词类 == "结果动补" ~ 2.35))
+
+lh_summary <- df_hb %>%
+  group_by(组别, 句法结构, 词类, x_pos) %>%
+  summarise(
+    均值 = mean(可能性),
+    标准差 = sd(可能性),
+    n = n(),
+    标准误 = 标准差 / sqrt(n),
+    CI_lower = 均值 - 1.96 * 标准误,
+    CI_upper = 均值 + 1.96 * 标准误,
+    .groups = 'drop')
+figlh <- ggplot(lh_summary, aes(x = x_pos, y = 均值, fill = 词类)) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper),
+                position = position_dodge(0.6),
+                width = 0.1, color = "grey10", linewidth = 0.6) +
+  geom_col(alpha = 0.85, width = 0.3, position = position_dodge(0.6)) +
+  geom_point(data = df_hb, 
+             aes(x = x_pos, y = 可能性, color = 词类),
+             position = position_jitter(width = 0.02, height = 0),
+             size = 2.5, alpha = 0.7, show.legend = FALSE) +
+  facet_wrap(~组别, nrow = 1,
+             labeller = labeller(组别 = c("TDC"="典型儿童","ASD"="孤独症儿童"))) +
+  labs(y = "句法对齐可能性", x = "句法结构", fill = "词类") +
+  theme_test() +
+  theme(
+    axis.text.x = element_text(size=12),
+    axis.text.y = element_text(size=12),
+    axis.title.x = element_blank(),
+    strip.text = element_text(size=12),
+    legend.title = element_blank(),
+    legend.text = element_text(size=12)) +
+  scale_fill_manual(values = c("趋向动补"="#B3742D", "结果动补"="#006654"),
+                    labels = c("趋向动补"="动趋式","结果动补"="动结式")) +
+  scale_color_manual(values = c("趋向动补"="#B3742D", "结果动补"="#006654")) +
+  scale_x_continuous(
+    breaks = c(1.17, 2.17),
+    labels = c("把字句","被字句")) +
+  scale_y_continuous(limits = c(0,0.9), breaks = seq(0,0.9,0.2), 
+                     expand = expansion(mult = c(0, 0.05)))
+figlh
+ggsave("./figure/figlh.svg", plot = figlh, width = 6.5, height = 4)
+ggsave("./figure/figlh.png", plot = figlh, width = 6.5, height = 4)
 ```
 
 
-```{r 趋向动补协同和结果动补差异图}
-fighb <- ggplot(df_hb, aes(x = 词类, y = as.numeric(可能性)))+
-  geom_half_violin(data = ~ subset(.x, 词类 == "趋向动补"),
-                   aes(color = 词类), size = 1, side = "l", alpha = 0.8)+
-  geom_half_violin(data = ~ subset(.x, 词类 == "结果动补"),
-                   aes(color = 词类), size = 1, side = "r", alpha = 0.8)+
-  geom_boxplot(aes(color = 词类), width = 0.3, size = 1)+
-  geom_line(aes(group = Child_name), color = "grey70", linewidth = 0.85)+
-  geom_jitter(aes(color = 词类, fill = 词类), alpha = 0.9, size = 4, pch = 21, width = 0.02)+ 
-  labs(y = "句法协同强度", x = NULL)+
-  facet_wrap(~ 组别, nrow = 1, labeller = labeller(组别 = c("TDC" = "典型儿童",  "ASD" = "孤独症儿童"))) +
-  theme_test()+
-  scale_fill_manual(values = c("#B3742D", "#006654"))+
-  scale_color_manual(values = c("#B3742D", "#006654"))+
-  theme(axis.text.x = element_text(size = 12, color = "black"),
-        axis.text.y = element_text(size = 11, color = "black"),
-        axis.title.y = element_text(size = 12, color = "black"),
-        axis.ticks.y = element_blank(),
-        strip.text = element_text(size = 12, color = "black"),
-        legend.position = "none", 
-        panel.grid.major = element_line(size = 0.2, color = "#e5e5e5"))
-fighb
-ggsave("./figure/fighb.svg", plot = fighb, width = 6, height = 3.5)
-ggsave("./figure/fighb.png", plot = fighb, width = 6, height = 3.5)
-```
-
-结果动补的句法协同更强（结果动补适合被和把），即在主动句的启动下更多的产出了主动句，
-说明主动句句法结构比较简单，而被动句和把字句句法较难。
-
-```{r 趋向产生什么数据准备}
+```{r 被字句时说什么整理}
 df02 <- df %>%
   dplyr::filter(Sen_ACC == 1) %>%
   merge(basic, by = "Child_name") %>%
@@ -591,41 +904,45 @@ df02 <- df %>%
   dplyr::select(Child_name, Sex, Age, Group, everything()) %>%
   dplyr::mutate(词类 = ifelse(Words_prime %in% quxiang, "趋向动补", "结果动补"),
                 词类 = factor(词类, levels = c("趋向动补", "结果动补")),
-                Syntax_production = ifelse(is.na(Syntax_production), "错误", as.character(Syntax_production)),
+                Syntax_production = ifelse(is.na(Syntax_production), "错误",
+                                           as.character(Syntax_production)),
                 Group = factor(Group, levels = c("TDC", "ASD")),
                 Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be")))
 df02 <- merge(df02, pingfen, by = "Rate_ID")
 ```
 
-```{r 趋向动补贝叶斯}
-dfqx2 <- df02 |>
+```{r 被字句时说什么贝叶斯}
+dfbe3 <- df02 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, PPVTZ, 词类, Trials) |>
-  dplyr::filter(词类 == "趋向动补", Syntax_prime == "be", Syntax_production != "错误") |>
+  dplyr::filter(Syntax_prime == "be", Syntax_production != "错误") |>
   dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("be", "ba", "zh")))
-#qx.prior <- c(set_prior("normal(0, 5)", class = "b", coef = "GroupASD", dpar = "muba"))
 
 model_formulas <- list(
-  mul.qx1 = Syntax_production ~ 1 + Group + PPVTZ + (1| Child_name) + (1 | Trials),
-  mul.qx2 = Syntax_production ~ 1 + Group + PPVTZ + (1| Trials),
-  mul.qx3 = Syntax_production ~ 1 + Group + PPVTZ + (1| Child_name),
-  mul.qx4 = Syntax_production ~ 1 + Group + PPVTZ,
-  mul.qx5 = Syntax_production ~ 1 + Group + (1| Trials) +(1| Child_name),
-  mul.qx6 = Syntax_production ~ 1 + Group + (1| Trials),
-  mul.qx7 = Syntax_production ~ 1 + Group + (1| Child_name),
-  mul.qx8 = Syntax_production ~ 1 + Group,
-  mul.qx9 = Syntax_production ~ 1 + PPVTZ + (1| Child_name) + (1 | Trials),
-  mul.qx10 = Syntax_production ~ 1 + PPVTZ + (1| Child_name),
-  mul.qx11 = Syntax_production ~ 1 + PPVTZ + (1| Trials),#最优模型
-  mul.qx12 = Syntax_production ~ 1 + PPVTZ,
-  mul.qx13 = Syntax_production ~ 1) 
+  mul.be1 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name) + (1 | Trials),
+  mul.be2 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name) + (1 | Trials),
+  mul.be3 = Syntax_production ~ 1 + Group * 词类 + (1| Trials),
+  mul.be4 = Syntax_production ~ 1 + Group + 词类 + (1| Trials),
+  mul.be5 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name),
+  mul.be6 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name),
+  mul.be7 = Syntax_production ~ 1 + Group * 词类,
+  mul.be8 = Syntax_production ~ 1 + Group + 词类
+  mul.be9 = Syntax_production ~ 1 + Group + (1| Trials) +(1| Child_name),
+  mul.be10 = Syntax_production ~ 1 + Group + (1| Trials),
+  mul.be11 = Syntax_production ~ 1 + Group + (1| Child_name),
+  mul.be12 = Syntax_production ~ 1 + Group,
+  mul.be13 = Syntax_production ~ 1 + 词类 + (1| Child_name) + (1 | Trials),
+  mul.be14 = Syntax_production ~ 1 + 词类 + (1| Child_name),
+  mul.be15 = Syntax_production ~ 1 + 词类 + (1| Trials),
+  mul.be16 = Syntax_production ~ 1 + 词类,
+  mul.be17 = Syntax_production ~ 1) 
 
-quxiang_objects <- list()
-quxiang_summaries <- list ()
+BE_objects <- list()
+BE_summaries <- list ()
 for (model_name in names(model_formulas)) {
   formula <- model_formulas[[model_name]]
   model <- brm(
     formula = formula,
-    data = dfqx2 ,
+    data = dfbe3,
     init = 0,
     family = categorical(link = "logit"),
     chains = 4,
@@ -634,61 +951,68 @@ for (model_name in names(model_formulas)) {
     thin = 1,
     cores = 4)
 
-  quxiang_objects[[model_name]] <- model
-  quxiang_summaries[[model_name]] <- summary(model)
+  BE_objects[[model_name]] <- model
+  BE_summaries[[model_name]] <- summary(model)
 }
-loo_qx <- list()
-for (model_name in names(quxiang_objects)) {
-  loo_qx[[model_name]] <- LOO(quxiang_objects[[model_name]])
+loo_be <- list()
+for (model_name in names(BE_objects)) {
+  loo_be[[model_name]] <- LOO(BE_objects[[model_name]])
 }
-qx.compare <- brms::LOO(
-  quxiang_objects$mul.qx1,
-  quxiang_objects$mul.qx2,
-  quxiang_objects$mul.qx3,
-  quxiang_objects$mul.qx4,
-  quxiang_objects$mul.qx5,
-  quxiang_objects$mul.qx6,
-  quxiang_objects$mul.qx7,
-  quxiang_objects$mul.qx8,
-  quxiang_objects$mul.qx9,
-  quxiang_objects$mul.qx10,
-  quxiang_objects$mul.qx11,
-  quxiang_objects$mul.qx12,
-  quxiang_objects$mul.qx13
+be.compare <- brms::LOO(
+  BE_objects$mul.be1,
+  BE_objects$mul.be2,
+  BE_objects$mul.be3,
+  BE_objects$mul.be4,
+  BE_objects$mul.be5,
+  BE_objects$mul.be6,
+  BE_objects$mul.be7,
+  BE_objects$mul.be8,
+  BE_objects$mul.be9,
+  BE_objects$mul.be10,
+  BE_objects$mul.be11,
+  BE_objects$mul.be12,
+  BE_objects$mul.be13,
+  BE_objects$mul.be14,
+  BE_objects$mul.be15,
+  BE_objects$mul.be16,
+  BE_objects$mul.be17
 )
-bayestestR::hdi(quxiang_objects$mul.qx13)
+#bayestestR::hdi(BE_objects$mul.be9)
 ```
 
 
-```{r 结果动补贝叶斯}
-dfjg2 <- df02 |>
+```{r 把字句时说什么贝叶斯}
+dfba3 <- df02 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, PPVTZ, 词类, Trials) |>
-  dplyr::filter(词类 != "趋向动补", Syntax_prime == "zh", Syntax_production != "错误") |>
-  dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be")))
+  dplyr::filter(Syntax_prime == "ba", Syntax_production != "错误") |>
+  dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("ba", "be", "zh")))
 
 model_formulas <- list(
-  mul.jg1 = Syntax_production ~ 1 + Group + PPVTZ + (1| Child_name) + (1 | Trials),
-  mul.jg2 = Syntax_production ~ 1 + Group + PPVTZ +(1| Trials),
-  mul.jg3 = Syntax_production ~ 1 + Group + PPVTZ +(1| Child_name),
-  mul.jg4 = Syntax_production ~ 1 + Group + (1| Child_name) + (1 | Trials),
-  mul.jg5 = Syntax_production ~ 1 + Group +(1| Trials),
-  mul.jg6 = Syntax_production ~ 1 + Group +(1| Child_name),
-  mul.jg7 = Syntax_production ~ 1 + Group + PPVTZ,
-  mul.jg8 = Syntax_production ~ 1 + Group,
-  mul.jg9 = Syntax_production ~ 1 + PPVTZ + (1| Child_name) + (1 | Trials), #最优模型
-  mul.jg10 = Syntax_production ~ 1 + PPVTZ + (1| Child_name),
-  mul.jg11 = Syntax_production ~ 1 + PPVTZ + (1| Trials),
-  mul.jg12 = Syntax_production ~ 1 + PPVTZ ,
-  mul.jg13 = Syntax_production ~ 1)
+  mul.ba1 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name) + (1 | Trials),
+  mul.ba2 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name) + (1 | Trials),
+  mul.ba3 = Syntax_production ~ 1 + Group * 词类 + (1| Trials),
+  mul.ba4 = Syntax_production ~ 1 + Group + 词类 + (1| Trials),
+  mul.ba5 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name),
+  mul.ba6 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name),
+  mul.ba7 = Syntax_production ~ 1 + Group * 词类,
+  mul.ba8 = Syntax_production ~ 1 + Group + 词类
+  mul.ba9 = Syntax_production ~ 1 + Group + (1| Trials) +(1| Child_name),
+  mul.ba10 = Syntax_production ~ 1 + Group + (1| Trials),
+  mul.ba11 = Syntax_production ~ 1 + Group + (1| Child_name),
+  mul.ba12 = Syntax_production ~ 1 + Group,
+  mul.ba13 = Syntax_production ~ 1 + 词类 + (1| Child_name) + (1 | Trials),
+  mul.ba14 = Syntax_production ~ 1 + 词类 + (1| Child_name),
+  mul.ba15 = Syntax_production ~ 1 + 词类 + (1| Trials),
+  mul.ba16 = Syntax_production ~ 1 + 词类,
+  mul.ba17 = Syntax_production ~ 1) 
 
-jieguo_objects <- list()
-jieguo_summaries <- list ()
-
+BA_objects <- list()
+BA_summaries <- list ()
 for (model_name in names(model_formulas)) {
   formula <- model_formulas[[model_name]]
   model <- brm(
     formula = formula,
-    data = dfjg2 ,
+    data = dfba3,
     init = 0,
     family = categorical(link = "logit"),
     chains = 4,
@@ -697,32 +1021,37 @@ for (model_name in names(model_formulas)) {
     thin = 1,
     cores = 4)
 
-  jieguo_objects[[model_name]] <- model
-  jieguo_summaries[[model_name]] <- summary(model)
+  BA_objects[[model_name]] <- model
+  BA_summaries[[model_name]] <- summary(model)
 }
-
-loo_jg <- list()
-for (model_name in names(jieguo_objects)) {
-  loo_jg[[model_name]] <- LOO(jieguo_objects[[model_name]])
+loo_ba <- list()
+for (model_name in names(BA_objects)) {
+  loo_ba[[model_name]] <- LOO(BA_objects[[model_name]])
 }
-
-jg.compare <- brms::LOO(
-  jieguo_objects$mul.jg1,
-  jieguo_objects$mul.jg2,
-  jieguo_objects$mul.jg3,
-  jieguo_objects$mul.jg4,
-  jieguo_objects$mul.jg5,
-  jieguo_objects$mul.jg6,
-  jieguo_objects$mul.jg7,
-  jieguo_objects$mul.jg8,
-  jieguo_objects$mul.jg9,
-  jieguo_objects$mul.jg10,
-  jieguo_objects$mul.jg11,
-  jieguo_objects$mul.jg12,
-  jieguo_objects$mul.jg13
+ba.compare <- brms::LOO(
+  BA_objects$mul.ba1,
+  BA_objects$mul.ba2,
+  BA_objects$mul.ba3,
+  BA_objects$mul.ba4,
+  BA_objects$mul.ba5,
+  BA_objects$mul.ba6,
+  BA_objects$mul.ba7,
+  BA_objects$mul.ba8,
+  BA_objects$mul.ba9,
+  BA_objects$mul.ba10,
+  BA_objects$mul.ba11,
+  BA_objects$mul.ba12,
+  BA_objects$mul.ba13,
+  BA_objects$mul.ba14,
+  BA_objects$mul.ba15,
+  BA_objects$mul.ba16,
+  BA_objects$mul.ba17
 )
-bayestestR::hdi(jieguo_objects$mul.jg9)
+#bayestestR::hdi(BE_objects$mul.be9)
 ```
+
+
+
 
 ```{r 桑基图数据整理}
 dfqx3 <- df02 |>

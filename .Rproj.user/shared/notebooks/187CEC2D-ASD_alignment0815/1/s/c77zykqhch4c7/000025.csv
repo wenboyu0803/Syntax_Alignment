@@ -1,7 +1,0 @@
-"0","qx3.b <- mcmc_plot(qx3.bayes, "
-"0","                   variable = c(""b_Syntax_primeba"","
-"0","                                ""b_Syntax_primezh"","
-"0","                                ""b_GroupASD"","
-"0","                                ""b_PPVTZ""),"
-"0","                   type = ""areas"", prob = 0.95)"
-"0","qx3.b"
