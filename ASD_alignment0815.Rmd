@@ -894,7 +894,6 @@ ggsave("./figure/figlh.svg", plot = figlh, width = 6.5, height = 4)
 ggsave("./figure/figlh.png", plot = figlh, width = 6.5, height = 4)
 ```
 
-
 ```{r 被字句时说什么整理}
 df02 <- df %>%
   dplyr::filter(Sen_ACC == 1) %>%
@@ -916,7 +915,7 @@ dfbe3 <- df02 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, PPVTZ, 词类, Trials) |>
   dplyr::filter(Syntax_prime == "be", Syntax_production != "错误") |>
   dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("be", "ba", "zh")))
-
+set.seed(326)
 model_formulas <- list(
   mul.be1 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name) + (1 | Trials),
   mul.be2 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name) + (1 | Trials),
@@ -925,7 +924,7 @@ model_formulas <- list(
   mul.be5 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name),
   mul.be6 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name),
   mul.be7 = Syntax_production ~ 1 + Group * 词类,
-  mul.be8 = Syntax_production ~ 1 + Group + 词类
+  mul.be8 = Syntax_production ~ 1 + Group + 词类,
   mul.be9 = Syntax_production ~ 1 + Group + (1| Trials) +(1| Child_name),
   mul.be10 = Syntax_production ~ 1 + Group + (1| Trials),
   mul.be11 = Syntax_production ~ 1 + Group + (1| Child_name),
@@ -977,14 +976,36 @@ be.compare <- brms::LOO(
   BE_objects$mul.be16,
   BE_objects$mul.be17
 )
-#bayestestR::hdi(BE_objects$mul.be9)
+BE.hdi <- bayestestR::hdi(BE_objects$mul.be9)
+BE_objects$mul.be9
+```
+```{r 被字句概率转换}
+#TD儿童
+rba_be <- exp(summary(BE_objects$mul.be9)$fixed[1,1])
+rzh_be <- exp(summary(BE_objects$mul.be9)$fixed[2,1])
+# P(be)+P(ba)+P(zh)=1
+# P(ba)=rba_be *P(be)
+# P(ba)=rzh_be *P(be)
+# p(be) = 1/(rba_be + rzh_be) = 0.2455
+# p(ba) = 2.53 × 0.2455 = 0.621
+# P(zh) = 0.543 × 0.2455 = 0.133
+cat("TD儿童产出把字句和被字句的可能性比值是：0.621/0.246", "\n")
+#ASD 
+Rba_be <- exp(summary(BE_objects$mul.be9)$fixed[1,1] + summary(BE_objects$mul.be9)$fixed[3,1])
+Rzh_be <- exp(summary(BE_objects$mul.be9)$fixed[2,1] + summary(BE_objects$mul.be9)$fixed[4,1])
+# p(be) = 1 / (1 + Rba_be + Rzh_be)
+# P(ba)=1.632×0.3088=0.504
+# P(zh)=0.6065×0.3088=0.187
+cat("TD儿童产出把字句和被字句的可能性比值是：0.504/0.30831", "\n")
 ```
 
 
 ```{r 把字句时说什么贝叶斯}
 dfba3 <- df02 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, PPVTZ, 词类, Trials) |>
-  dplyr::filter(Syntax_prime == "ba", Syntax_production != "错误") |>
+  dplyr::filter(Syntax_prime == "ba", 
+                Syntax_production != "错误", 
+                !is.na(Syntax_production)) |>
   dplyr::mutate(Syntax_production = factor(Syntax_production, levels = c("ba", "be", "zh")))
 
 model_formulas <- list(
@@ -995,7 +1016,7 @@ model_formulas <- list(
   mul.ba5 = Syntax_production ~ 1 + Group * 词类 + (1| Child_name),
   mul.ba6 = Syntax_production ~ 1 + Group + 词类 + (1| Child_name),
   mul.ba7 = Syntax_production ~ 1 + Group * 词类,
-  mul.ba8 = Syntax_production ~ 1 + Group + 词类
+  mul.ba8 = Syntax_production ~ 1 + Group + 词类,
   mul.ba9 = Syntax_production ~ 1 + Group + (1| Trials) +(1| Child_name),
   mul.ba10 = Syntax_production ~ 1 + Group + (1| Trials),
   mul.ba11 = Syntax_production ~ 1 + Group + (1| Child_name),
@@ -1047,55 +1068,43 @@ ba.compare <- brms::LOO(
   BA_objects$mul.ba16,
   BA_objects$mul.ba17
 )
-#bayestestR::hdi(BE_objects$mul.be9)
+bayestestR::hdi(BA_objects$mul.ba13)
 ```
 
 
-
-
 ```{r 桑基图数据整理}
-dfqx3 <- df02 |>
-  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC, 词类) |>
-  dplyr::filter(词类 == "趋向动补", Syntax_prime == "be") |>
+dfbe4 <- df02 |>
+  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC) |>
+  dplyr::filter(Syntax_prime == "be", Syntax_production != "gei") |>
   count(Syntax_production, Group) |>
   dplyr::mutate(Syntax_prime = rep("be", 6)) |>
   rename(freq = n)
 
-dfjg3 <- df02 |>
+dfba4 <- df02 |>
   dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC, 词类) |>
-  dplyr::filter(词类 != "趋向动补", Syntax_prime == "zh") |>
+  dplyr::filter(Syntax_prime == "zh") |>
   count(Syntax_production, Group) |>
-  dplyr::mutate(Syntax_prime = rep("be", 4)) |>
+  dplyr::mutate(Syntax_prime = rep("ba", 5)) |>
   rename(freq = n)
 ```
 
-```{r 趋向动补桑基图}
-dfqx3_pct <- dfqx3 %>%
-  mutate(total_all = sum(freq))
+```{r 被字句桑基图}
+dfbe4_pct <- dfbe4 %>% mutate(total_all = sum(freq))
 right_labels <- data.frame(
   Syntax_production = c("be", "zh", "ba"),
-  freq = c(16, 18, 30),
-  label = c("被字句\n25.00%", "主动句\n28.12%", "把字句\n46.88%"),
+  freq = c(42, 41, 75),
+  label = c("被字句\n26.58%", "主动句\n25.95%", "把字句\n47.47%"),
   x = 1.86,
-  y = c(8.4, 16 + 9.4, 34 + 15)  # 条带中心：16/2=8, 16+18/2=25, 34+30/2=49
-)
-
-left_labels <- data.frame(
-  Group = c("TDC", "ASD"),
-  y = c(17, 15),
-  x = 1,
-  label = c("典型儿童\n34(试次)", "孤独症儿童\n30(试次)")
-)
-
+  y = c(21, 62.5, 119))
 left_labels <- data.frame(
   Group = c("典型儿童", "孤独症儿童"),
-  total = c(34, 30),
+  total = c(81, 78),
   x = 1,
-  y = c(34/2 + 30, 30/2)  # TDC在上，ASD在下，调整到中心
+  y = c(85/2, 81 + 78/2)  # TDC在上，ASD在下，调整到中心
 ) %>%
   mutate(label = paste0(Group, "\n", total))
 
-fig1 <- ggplot(dfqx3_pct, 
+fig1 <- ggplot(dfbe4_pct, 
                aes(axis1 = Group, 
                    axis2 = Syntax_production, 
                    y = freq)) +
@@ -1117,7 +1126,7 @@ fig1 <- ggplot(dfqx3_pct,
             size = 5,
             hjust = 0,
             nudge_x = 0.08) +
-  scale_x_discrete(limits = c("被动句产出", "儿童协同"), 
+  scale_x_discrete(limits = c("成人产出", "儿童对齐"), 
                    expand = c(0.15, 0.1),
                    position = "top") +  # 轴标签移到顶部
   scale_fill_manual(values = c("zh" = "#B3742D", 
@@ -1126,45 +1135,34 @@ fig1 <- ggplot(dfqx3_pct,
                     name = "产出句法",
                     labels = c("主动句", "把字句", "被字句")) +
   theme_void() +
-  theme(
-  legend.position = c(0.5, 1.05),  # x=0.5居中, y=1.05在图上方
-  legend.direction = "horizontal",
-  legend.title = element_blank(),
-  legend.text = element_text(size = 13),
-  legend.key.size = unit(0.6, "cm"),
-  axis.text.x = element_text(size = 13, vjust = 2.5),
-  axis.title.x = element_blank(),
-  plot.margin = margin(t = 10, b = 0, l = 0, r = 0))
+  theme(legend.position = c(0.5, 1.045),  # x=0.5居中, y=1.05在图上方
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 13),
+        legend.key.size = unit(0.6, "cm"),
+        axis.text.x = element_text(size = 13, vjust = 2.5),
+        axis.title.x = element_blank(),
+        plot.margin = margin(t = 10, b = 0, l = 0, r = 0))
 fig1
 ```
 
-```{r 结果动补桑基图}
-dfjg3_pct <- dfjg3 %>%
-  mutate(total_all = sum(freq))
+```{r 把字句桑基图}
+dfba4_pct <- dfba4 %>% mutate(total_all = sum(freq))
 right_labels <- data.frame(
-  Syntax_production = c("ba", "zh"),
-  freq = c(34, 42),
-  label = c("把动句\n32.08%", "主动句\n67.92%"),
+  Syntax_production = c("be", "zh", "ba"),
+  freq = c(1, 44, 116),
+  label = c("被字句\n0.01%", "主动句\n72.05%", "把字句\n27.33%"),
   x = 1.86,
-  y = c(89, 36)  # 条带中心：16/2=8, 16+18/2=25, 34+30/2=49
-)
-
-left_labels <- data.frame(
-  Group = c("TDC", "ASD"),
-  y = c(25.5, 87),
-  x = 1,
-  label = c("典型儿童\n34(试次)", "孤独症儿童\n30(试次)")
-)
+  y = c(105, 65, 140))
 
 left_labels <- data.frame(
   Group = c("典型儿童", "孤独症儿童"),
-  total = c(51, 55),
+  total = c(81, 78),
   x = 1,
-  y = c(51/2 + 55, 55/2)  # TDC在上，ASD在下，调整到中心
-) %>%
+  y = c(85/2, 81 + 78/2)) %>%
   mutate(label = paste0(Group, "\n", total))
 
-fig2 <- ggplot(dfjg3_pct, 
+fig2 <- ggplot(dfba4_pct, 
                aes(axis1 = Group, 
                    axis2 = Syntax_production, 
                    y = freq)) +
@@ -1186,16 +1184,17 @@ fig2 <- ggplot(dfjg3_pct,
             size = 5,
             hjust = 0,
             nudge_x = 0.08) +
-  scale_x_discrete(limits = c("主动句产出", "儿童协同"), 
+  scale_x_discrete(limits = c("成人产出", "儿童对齐"), 
                    expand = c(0.15, 0.1),
                    position = "top") +  # 轴标签移到顶部
-  scale_fill_manual(values = c("zh" = "#B3742D",
-                               "ba" =  "#006654"),
+  scale_fill_manual(values = c("zh" = "#B3742D", 
+                               "ba" = "#006654", 
+                               "be" = "#7570B3"),
                     name = "产出句法",
-                    labels = c("主动句", "把字句")) +
+                    labels = c("把字句", "主动句", "被字句")) +
   theme_void() +
   theme(
-  legend.position = c(0.5, 1.05),  # x=0.5居中, y=1.05在图上方
+  legend.position = c(0.5, 1.045),  # x=0.5居中, y=1.05在图上方
   legend.direction = "horizontal",
   legend.title = element_blank(),
   legend.text = element_text(size = 13),
@@ -1208,190 +1207,10 @@ fig2
 ```
 
 ```{r 结果动补+趋向动补}
-fig3 <- fig1+fig2
-ggsave("./figure/fig3.svg", plot = fig3, width = 12.5, height = 4)
-ggsave("./figure/fig3.png", plot = fig3, width = 12.5, height = 4)
+fig4 <- fig1+fig2
+ggsave("./figure/fig4.svg", plot = fig4, width = 12.5, height = 4)
+ggsave("./figure/fig4.png", plot = fig4, width = 12.5, height = 4)
 ```
 
 
 ###############################################################################################
-
-```{r 不协同时组别和产出有什么关联频次检验}
-df02 <- df %>%
-  dplyr::filter(Sen_ACC == 1) %>%
-  merge(basic, by = "Child_name") %>%
-  dplyr::mutate(Group = Group.x) %>%
-  dplyr::select(-Group.x, -Group.y, -contains(".x"), -contains(".y"), -Task_Data, -Birth_data) %>%
-  dplyr::select(Child_name, Sex, Age, Group, everything()) %>%
-  dplyr::mutate(词类 = ifelse(Words_prime %in% quxiang, "趋向动补", "结果动补"),
-                词类 = factor(词类, levels = c("趋向动补", "结果动补")),
-                Syntax_production = ifelse(is.na(Syntax_production), "错误", as.character(Syntax_production)),
-                Syntax_production = factor(Syntax_production, levels = c("zh", "ba", "be", "错误")),
-                Group = factor(Group, levels = c("TDC", "ASD")),
-                Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be")))
-df02 <- merge(df02, pingfen, by = "Rate_ID")
-
-dfqx2 <- df02 |>
-  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC, 词类) |>
-  dplyr::filter(词类 == "趋向动补", Syntax_prime == "be") |>
-  count(Syntax_production, Group) |>
-  pivot_wider(names_from = Group, values_from = n, values_fill = 0) |>
-  column_to_rownames("Syntax_production") |>
-  as.matrix()
-dfjg2 <- df02 |>
-  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Syntax_ACC, 词类) |>
-  dplyr::filter(词类 != "趋向动补", Syntax_prime == "zh") |>
-  count(Syntax_production, Group) |>
-  pivot_wider(names_from = Group, values_from = n, values_fill = 0) |>
-  column_to_rownames("Syntax_production") |>
-  as.matrix()
-dfqx2; dfjg2
-qxbf <- contingencyTableBF(dfqx2, sampleType = "poisson" )
-jgbf <- contingencyTableBF(dfjg2, sampleType = "poisson" )
-```
-
-
-```{r}
-DFba <- DF2 %>% 
-  dplyr::filter(Syntax_prime == "ba" & Syntax_ACC == 0)%>%
-  group_by(Syntax_production)%>%
-  summarise(count = n())
-
-DFzh <- DF2 %>% 
-  dplyr::filter(Syntax_prime == "zh" & Syntax_ACC == 0)%>%
-  group_by(Syntax_production)%>%
-  summarise(count = n())
-
-#语义错误的启动分类,卡方显示并不存在某种句法下诱导不出来
-DF3 <- df %>% 
-  dplyr::filter(!Child_name %in% DF1)%>%
-  merge(basic, by = "Child_name") %>%
-  dplyr::select(-contains(".x"), -contains(".y"), -Task_Data, -Birth_data) %>%
-  dplyr::select(Child_name, Sex, Age, everything())%>%
-  dplyr::mutate(Group = factor(Group, levels = c("ASD", "TDC")),
-                Syntax_prime = factor(Syntax_prime, levels = c("zh", "ba", "be")),
-                age = scale(Age, center = TRUE, scale = TRUE))%>%
-  dplyr::filter(Group == "ASD")%>%
-  filter(Sen_ACC == 0) %>% 
-  group_by(Syntax_prime) %>% 
-  summarise(n =n())
-predice.value = c(1/3, 1/3, 1/3)
-chisq.test(x = DF3$n, p = predice.value)
-```
-
-
-
-```{r 贝叶斯1406模型建立和比较正确产出}
-names(df01)
-a01.bayes <- brm(
-  Syntax_ACC ~ Syntax_prime * Group + (1| Child_name) + (1 | Trials),
-  data = df01,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-a02.bayes <- brm(
-  Syntax_ACC ~ Syntax_prime * Group + 词类 + (1| Child_name) + (1 | Trials),
-  data = df01,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-a03.bayes <- brm(
-  Syntax_ACC ~ Syntax_prime * Group * 词类 + (1| Child_name) + (1 | Trials),
-  data = df01,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-a04.bayes <- brm(
-  Syntax_ACC ~ Syntax_prime * Group + PPVTZ + 词类 + (1| Child_name) + (1 | Trials),
-  data = df01,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-a05.bayes <- brm(
-  Syntax_ACC ~ Syntax_prime * Group * 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
-  data = df01,
-  init = 0,
-  family = bernoulli(link = "logit"),
-  chains = 4,
-  warmup = 1000,
-  iter = 5000,
-  thin = 1,
-  cores = 4)
-
-looa01 <- LOO(a01.bayes)
-looa02 <- LOO(a02.bayes)
-looa03 <- LOO(a03.bayes)
-looa04 <- LOO(a04.bayes)
-looa05 <- LOO(a05.bayes)
-brms::loo_compare(looa01, looa02, looa03, looa04, looa05)
-
-a01.pp.mae <- posterior_predict(a01.bayes)
-a02.pp.mae <- posterior_predict(a02.bayes)
-a03.pp.mae <- posterior_predict(a03.bayes)
-a04.pp.mae <- posterior_predict(a04.bayes)
-a05.pp.mae <- posterior_predict(a05.bayes)
-a01.mae <- median(abs(apply(a01.pp.mae, 2, mean) - df01[, 16]))
-a02.mae <- median(abs(apply(a02.pp.mae, 2, mean) - df01[, 16]))
-a03.mae <- median(abs(apply(a03.pp.mae, 2, mean) - df01[, 16]))
-a04.mae <- median(abs(apply(a04.pp.mae, 2, mean) - df01[, 16]))
-a05.mae <- median(abs(apply(a05.pp.mae, 2, mean) - df01[, 16]))
-```
-
-```{r 贝叶斯1406模型拟合正确产出}
-a05_trace <- bayesplot::mcmc_trace(a05.bayes,
-                                   pars = c("b_Syntax_primeba",
-                                            "b_Syntax_primebe",
-                                            "b_GroupASD",
-                                            "b_词类结果动补",
-                                            "b_PPVTZ",
-                                            "b_Syntax_primeba:GroupASD",
-                                            "b_Syntax_primebe:GroupASD",
-                                            "b_Syntax_primeba:词类结果动补",
-                                            "b_Syntax_primebe:词类结果动补",
-                                            "b_GroupASD:词类结果动补",
-                                            "b_Syntax_primeba:GroupASD:词类结果动补",
-                                            "b_Syntax_primebe:GroupASD:词类结果动补"
-                                            )) +
-  theme(legend.text = element_text(size = 8),
-        legend.title = element_text(size = 10),
-        legend.margin = margin(1, 1, 1, 1, "pt"),
-        legend.key.size = unit(1, "lines"),
-        legend.key.height = unit(1, "lines")) +
-  guides(color = guide_legend(override.aes = list(size = 0.5)))
-a05_trace
-#ggsave(plot = trace_noeff, "./figure/trace_noeff.svg", width = 6, height = 4)
-
-a05.ppcheck <- pp_check(a05.bayes, ndraws = 100)
-a05.ppcheck 
-a05.b <- mcmc_plot(a05.bayes, 
-                   variable = c("b_Syntax_primeba",
-                                "b_Syntax_primebe",
-                                "b_GroupASD",
-                                "b_Syntax_primeba:GroupASD",
-                                "b_Syntax_primebe:GroupASD"),
-                   type = "areas", prob = 0.95)
-a05.b
-a05.pos <- posterior_predict(a05.bayes)
-a05.hdi <- bayestestR::hdi(a05.bayes)
-df01$predict = predict(a05.bayes, type = "response")[, 1]
-```
