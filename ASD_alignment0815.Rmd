@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 pacman::p_load(
+  buildmer,
   here,
   papaja,
   gghalves,
@@ -91,166 +92,6 @@ df01 <- df %>%
 df01 <- merge(df01, pingfen, by = "Rate_ID")
 ```
 
-```{r 评分数据整理}
-jgpingfen <- df01 |>
-  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Rating.mean, 
-  词类, Trials, PPVTZ) |>
-  dplyr::filter(词类 == "结果动补")
-qxpingfen <- df01 |>
-  dplyr::select(Child_name, Group, Syntax_prime, Syntax_production, Rating.mean, 
-  词类, Trials, PPVTZ) |>
-  dplyr::filter(词类 != "结果动补", 
-                #Syntax_prime == "be", 
-                #Syntax_production == "be"
-                )
-pf_df <- rbind(jgpingfen, qxpingfen) 
-
-# pf.df <- rbind(jgpingfen, qxpingfen) |> group_by(Child_name, Group, Syntax_production, Syntax_prime, 词类)|>
-#   summarise(mean = mean(Rating.mean))
-# fc <- bruceR::MANOVA(data = qxdf, dv = "mean", between = "Group", within = c("词类"), subID = "Child_name")
-```
-
-```{r 评分数据贝叶斯}
-model_formulas <- list(
-  pf1 = Rating.mean ~ 1 + Group * 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
-  pf2 = Rating.mean ~ 1 + Group * 词类 + PPVTZ + (1| Trials),
-  pf3 = Rating.mean ~ 1 + Group * 词类 + PPVTZ + (1| Child_name),
-  pf4 = Rating.mean ~ 1 + Group * 词类 + PPVTZ,
-  pf5 = Rating.mean ~ 1 + Group * 词类 + (1| Trials) +(1| Child_name),
-  pf6 = Rating.mean ~ 1 + Group * 词类 + (1| Trials),
-  pf7 = Rating.mean ~ 1 + Group * 词类+ (1| Child_name),
-  pf8 = Rating.mean ~ 1 + Group * 词类,
-  pf9 = Rating.mean ~ 1 + Group + 词类 + PPVTZ + (1| Child_name) + (1 | Trials),
-  pf10 = Rating.mean ~ 1 + Group + 词类 + PPVTZ + (1| Child_name),
-  pf11 = Rating.mean ~ 1 + Group + 词类 + PPVTZ + (1| Trials), #最优模型
-  pf12 = Rating.mean ~ 1 + Group + 词类 + PPVTZ,
-  pf13 = Rating.mean ~ 1  + Group + 词类,
-  pf14 = Rating.mean ~ 1 + Group,
-  pf15 = Rating.mean ~ 1 + 词类) 
-
-pf_objects <- list()
-pf_summaries <- list ()
-for (model_name in names(model_formulas)) {
-  formula <- model_formulas[[model_name]]
-  model <- brm(
-    formula = formula,
-    data = pf_df ,
-    init = 0,
-    chains = 4,
-    warmup = 1000,
-    iter = 5000,
-    thin = 1,
-    cores = 4)
-
-  pf_objects[[model_name]] <- model
-  pf_summaries[[model_name]] <- summary(model)
-}
-loo_qx <- list()
-for (model_name in names(pf_objects)) {
-  loo_qx[[model_name]] <- LOO(pf_objects[[model_name]])
-}
-pf.compare <- brms::LOO(
-  pf_objects$pf1,
-  pf_objects$pf2,
-  pf_objects$pf3,
-  pf_objects$pf4,
-  pf_objects$pf5,
-  pf_objects$pf6,
-  pf_objects$pf7,
-  pf_objects$pf8,
-  pf_objects$pf9,
-  pf_objects$pf10,
-  pf_objects$pf11,
-  pf_objects$pf12,
-  pf_objects$pf13,
-  pf_objects$pf14,
-  pf_objects$pf15
-)
-bayestestR::hdi(pf_objects$pf9)
-
-pf1.mae <- posterior_predict(pf_objects$pf1)
-pf2.mae <- posterior_predict(pf_objects$pf2)
-pf3.mae <- posterior_predict(pf_objects$pf3)
-pf4.mae <- posterior_predict(pf_objects$pf4)
-pf5.mae <- posterior_predict(pf_objects$pf5)
-pf6.mae <- posterior_predict(pf_objects$pf6)
-pf7.mae <- posterior_predict(pf_objects$pf7)
-pf8.mae <- posterior_predict(pf_objects$pf8)
-pf9.mae <- posterior_predict(pf_objects$pf9)
-pf10.mae <- posterior_predict(pf_objects$pf10)
-pf11.mae <- posterior_predict(pf_objects$pf11)
-pf12.mae <- posterior_predict(pf_objects$pf12)
-pf13.mae <- posterior_predict(pf_objects$pf13)
-pf14.mae <- posterior_predict(pf_objects$pf14)
-pf15.mae <- posterior_predict(pf_objects$pf15)
-
-pf1 <- median(abs(apply(pf1.mae, 2, mean) - pf_df[, 5]))
-pf2 <- median(abs(apply(pf2.mae, 2, mean) - pf_df[, 5]))
-pf3 <- median(abs(apply(pf3.mae, 2, mean) - pf_df[, 5]))
-pf4 <- median(abs(apply(pf4.mae, 2, mean) - pf_df[, 5]))
-pf5 <- median(abs(apply(pf5.mae, 2, mean) - pf_df[, 5]))
-pf6 <- median(abs(apply(pf6.mae, 2, mean) - pf_df[, 5]))
-pf7 <- median(abs(apply(pf7.mae, 2, mean) - pf_df[, 5]))
-pf8 <- median(abs(apply(pf8.mae, 2, mean) - pf_df[, 5]))
-pf9 <- median(abs(apply(pf9.mae, 2, mean) - pf_df[, 5]))
-pf10 <- median(abs(apply(pf10.mae, 2, mean) - pf_df[, 5]))
-pf11 <- median(abs(apply(pf11.mae, 2, mean) - pf_df[, 5]))
-pf12 <- median(abs(apply(pf12.mae, 2, mean) - pf_df[, 5]))
-pf13 <- median(abs(apply(pf13.mae, 2, mean) - pf_df[, 5]))
-pf14 <- median(abs(apply(pf14.mae, 2, mean) - pf_df[, 5]))
-pf15 <- median(abs(apply(pf15.mae, 2, mean) - pf_df[, 5]))
-```
-
-
-```{r 评分fig4}
-pf_new <- df01 %>% 
-  dplyr::select(Syntax_prime, Syntax_production, Rating.mean, 词类, Group, Words_prime) |>
-  dplyr::group_by(Words_prime, 词类, Group) |>
-  dplyr::summarise(
-    pingfen = mean(Rating.mean, na.rm = TRUE), .groups = "drop")|>
-  arrange(词类, pingfen)|>
-  dplyr::mutate(Words_prime = factor(Words_prime, levels = unique(Words_prime))) |>
-  pivot_wider(names_from = Group, values_from = pingfen)
-table(pf_new$词类)
-n_quxiang <- sum(pf_new$词类 == "趋向动补")
-fig4 <- ggplot(pf_new) +
-  annotate("rect", xmin = n_quxiang + 0.5, xmax = Inf,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.5) +
-  annotate("rect", xmin = -Inf, xmax = n_quxiang + 0.5,
-           ymin = -Inf, ymax = Inf, fill = "white", alpha = 0.3) +
-  geom_segment(aes(x = Words_prime, xend = Words_prime, y = ASD, yend = TDC),
-               size = 1.5, color = "grey40") +
-  geom_point(aes(x = Words_prime, y = ASD), 
-             size = 4, color = "#B3742D", fill = "#B3742D", shape = 21) +
-  geom_point(aes(x = Words_prime, y = TDC), 
-             size = 4, color = "#006654", fill = "#006654", shape = 21) +
-  annotate("point", x = 8, y = 10.2, size = 4, 
-           color = "#B3742D", fill = "#B3742D", shape = 21) +
-  annotate("text", x = 8, y = 10.3, label = "孤独症儿童", 
-           size = 3.5, hjust = 0) +
-  annotate("point", x = 7, y = 10.2, size = 4, 
-           color = "#006654", fill = "#006654", shape = 21) +
-  annotate("text", x = 7, y = 10.3, label = "典型儿童", 
-           size = 3.5, hjust = 0) +
-  annotate("rect", xmin = 8.75, xmax = 9.25, ymin = 10.14, ymax = 10.26, 
-           fill = "grey90", color = "grey60", size = 0.3) +
-  annotate("text", x = 9, y = 10.3, label = "结果动补", 
-           size = 3.5, hjust = 0) +
-  annotate("rect", xmin = 5.75, xmax = 6.25, ymin = 10.14, ymax = 10.26, 
-           fill = "white", color = "grey60", size = 0.3) +
-  annotate("text", x = 6, y = 10.3, label = "趋向动补", 
-           size = 3.5, hjust = 0) +
-  theme_test() +
-  labs(y = NULL, x = NULL) +
-  coord_flip(ylim = c(5, 11)) + 
-  theme(axis.text.x = element_text(size = 12, color = "black"),
-        axis.text.y = element_text(size = 12, color = "black"),
-        axis.ticks.y = element_blank(), 
-        panel.grid.major = element_line(size = 0.2, color = "#e5e5e5"))
-fig4
-ggsave("./figure/fig4.svg", plot = fig4, width = 7, height = 5)
-ggsave("./figure/fig4.png", plot = fig4, width = 7, height = 5)
-```
 
 ```{r 把数据整理和模型}
 dfba <- df01 |> 
@@ -311,6 +152,7 @@ for (model_name in names(models_ba)) {
 ```
 
 ```{r 把模型比较}
+set.seed(0331)
 loo_ba <- list()
 for (model_name in names(ba_objects)) {
   loo_ba[[model_name]] <- LOO(ba_objects[[model_name]])
@@ -341,7 +183,6 @@ ba.compare <- brms::LOO(
   ba_objects$pf23,
   ba_objects$pf24
 )
-#bayestestR::hdi(ba_objects$pf21)
 
 ba1.mae <- posterior_predict(ba_objects$pf1)
 ba2.mae <- posterior_predict(ba_objects$pf2)
@@ -392,7 +233,16 @@ ba21 <- median(abs(apply(ba21.mae, 2, mean) - dfba[, 28]))
 ba22 <- median(abs(apply(ba22.mae, 2, mean) - dfba[, 28]))
 ba23 <- median(abs(apply(ba23.mae, 2, mean) - dfba[, 28]))
 ba24 <- median(abs(apply(ba24.mae, 2, mean) - dfba[, 28]))
+bayestestR::hdi(ba_objects$pf21)
 ```
+动趋式+TD+主动句logit(p) =-1.81+0+0+0, p = 1/(1+exp(-(-1.81))) = 0.14
+动趋式+TD+把字句logit(p)=−1.81+2.59=0.78, p =  1/(1+exp(-0.78)) = 0.68
+动结式+TD+主动句logit(p)=−1.81+0.91=−0.90, p = 1/(1+exp(-(-0.90))) = 0.29
+动结式+TD+把字句logit(p)=−1.81+2.59+0.91=1.69, p = 1/(1+exp(-1.69)) =0.84
+动趋式+ASD+主动句logit(p) =-1.81+0+0+0, p = 1/(1+exp(-(-1.81))) = 0.85
+动趋式+ASD+把字句logit(p)=−1.81+2.59=0.78, p =  1/(1+exp(-0.78)) = 0.31
+动结式+ASD+主动句logit(p)=−1.81+0.91=−0.90, p = 1/(1+exp(-(-0.90))) = 0.71
+动结式+ASD+把字句logit(p)=−1.81+2.59+0.91=1.69, p = 1/(1+exp(-1.69)) =0.15
 
 ```{r 把模型拟合}
 ba21_trace <- bayesplot::mcmc_trace(ba_objects$pf21,
@@ -459,7 +309,9 @@ models_be <- list(
  ) 
 ```
 
+
 ```{r 被模型建立和比较}
+set.seed(0331)
 be_objects <- list()
 be_summaries <- list ()
 for (model_name in names(models_be)) {
@@ -561,7 +413,18 @@ be21 <- median(abs(apply(be21.mae, 2, mean) - dfbe[, 28]))
 be22 <- median(abs(apply(be22.mae, 2, mean) - dfbe[, 28]))
 be23 <- median(abs(apply(be23.mae, 2, mean) - dfbe[, 28]))
 be24 <- median(abs(apply(be24.mae, 2, mean) - dfbe[, 28]))
+bayestestR::hdi(be_objects$pf9)
 ```
+
+动趋式+TD+主动句logit(p) =-20.08+0+0+0, p = 1/(1+exp(-(-20.08))) = 0
+动趋式+TD+被字句logit(p)=-20.08+18.11+0+0+0=-2.72, p =  1/(1+exp(-0.78)) = 6.16%
+动结式+TD+主动句logit(p)=−20.83+0+0+0.29+0=−20.54, p = 1/(1+exp(-(−20.54))) = 0
+动结式+TD+被字句logit(p)=−20.83+18.11+0+0.29+0=−2.43, p = 1/(1+exp(-2.43)) =0.08
+动趋式+ASD+主动句logit(p) =−20.83+0+14.16+0+0=−6.67, p = 1/(1+exp(-(-6.67))) = 0.13
+动趋式+ASD+被字句logit(p)=−−20.83+18.11+14.16+0+(−12.64)=−1.20, p =  1/(1+exp(1.2)) = 23.1%
+动结式+ASD+主动句logit(p)=−20.83+0+14.16+0.29+0, p = 1/(1+exp(6.38)) =0.17%
+动结式+ASD+被字句logit(p)=−20.83+18.11+14.16+0.29+(−12.64)=−0.91，p = 1/(1+exp(0.91 )) =28.7%
+
 
 ```{r 被模型拟合}
 be19_trace <- bayesplot::mcmc_trace(be_objects$pf19,
@@ -623,7 +486,7 @@ ba_summary <- df_unique %>%
 figba <- ggplot(ba_summary, aes(x = x_pos, y = 均值, fill = 组别)) +
   geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper),
                 position = position_dodge(0.75),
-                width = 0.1, color = "grey10", linewidth = 0.6) +
+                width = 0.2, color = "grey10", linewidth = 0.6) +
   geom_col(alpha = 0.85, width = 0.70, position = position_dodge(0.75)) +
   geom_point(data = df_unique, 
              aes(x = x_pos, y = 可能性, color = 组别),
@@ -672,7 +535,7 @@ be_summary <- df_unique %>%
 figbe <- ggplot(be_summary, aes(x = x_pos, y = 均值, fill = 组别)) +
   geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper),
                 position = position_dodge(0.75),
-                width = 0.1, color = "grey10", linewidth = 0.6) +
+                width = 0.2, color = "grey10", linewidth = 0.6) +
   geom_col(alpha = 0.85, width = 0.70, position = position_dodge(0.75)) +
   geom_point(data = df_unique, 
              aes(x = x_pos, y = 可能性, color = 组别),
@@ -740,6 +603,7 @@ df_hb <- rbind(dfba1, dfbe1) |> dplyr::mutate(可能性 = as.numeric(可能性))
 ```
 
 ```{r 把被联合分析模型建立}
+set.seed(0331)
 models_lh <- list(
   lh1 = 可能性 ~ 词类 + 句法结构 + 组别 + (1| Child_name),
   lh2 = 可能性 ~ 词类 * 组别 + 句法结构 + (1| Child_name),
@@ -841,6 +705,42 @@ chayi.pos <- posterior_predict(lh_objects$lh3)
 chayi.hdi <- bayestestR::hdi(lh_objects$lh3)
 df_hb$predict = predict(lh_objects$lh3, type = "response")[, 1]
 ```
+
+```{r 联合分析概率转换}
+beta_0 <- 0.62      # Intercept
+beta_1 <- 0.75      # 词类结果动补
+beta_2 <- -1.89     # 句法结构be
+beta_3 <- 0.21      # 组别ASD
+beta_4 <- -0.58     # 交互项
+
+inv_logit <- function(x) {
+  exp(x) / (1 + exp(x))
+}
+
+conditions <- expand.grid(
+  组别 = c("TD", "ASD"),
+  词类 = c("趋向动补", "结果动补"),
+  句法结构 = c("把字句", "be")
+)
+
+conditions$logit <- NA
+conditions$概率 <- NA
+
+for (i in 1:nrow(conditions)) {
+  use_beta1 <- ifelse(conditions$词类[i] == "结果动补", 1, 0)
+  use_beta2 <- ifelse(conditions$句法结构[i] == "be", 1, 0)
+  use_beta3 <- ifelse(conditions$组别[i] == "ASD", 1, 0)
+  use_beta4 <- ifelse(conditions$词类[i] == "结果动补" & conditions$句法结构[i] == "be", 1, 0)
+  conditions$logit[i] <- beta_0 + 
+                         beta_1 * use_beta1 + 
+                         beta_2 * use_beta2 + 
+                         beta_3 * use_beta3 + 
+                         beta_4 * use_beta4
+  conditions$概率[i] <- inv_logit(conditions$logit[i])
+}
+```
+
+
 
 ```{r 联合分析柱状图}
 df_hb <- df_hb %>%
@@ -979,6 +879,7 @@ be.compare <- brms::LOO(
 BE.hdi <- bayestestR::hdi(BE_objects$mul.be9)
 BE_objects$mul.be9
 ```
+
 ```{r 被字句概率转换}
 #TD儿童
 rba_be <- exp(summary(BE_objects$mul.be9)$fixed[1,1])
@@ -1068,6 +969,7 @@ ba.compare <- brms::LOO(
   BA_objects$mul.ba16,
   BA_objects$mul.ba17
 )
+BA_objects$mul.ba13
 bayestestR::hdi(BA_objects$mul.ba13)
 ```
 
@@ -1126,7 +1028,7 @@ fig1 <- ggplot(dfbe4_pct,
             size = 5,
             hjust = 0,
             nudge_x = 0.08) +
-  scale_x_discrete(limits = c("成人产出", "儿童对齐"), 
+  scale_x_discrete(limits = c("被字句", "儿童对齐"), 
                    expand = c(0.15, 0.1),
                    position = "top") +  # 轴标签移到顶部
   scale_fill_manual(values = c("zh" = "#B3742D", 
@@ -1184,7 +1086,7 @@ fig2 <- ggplot(dfba4_pct,
             size = 5,
             hjust = 0,
             nudge_x = 0.08) +
-  scale_x_discrete(limits = c("成人产出", "儿童对齐"), 
+  scale_x_discrete(limits = c("把字句", "儿童对齐"), 
                    expand = c(0.15, 0.1),
                    position = "top") +  # 轴标签移到顶部
   scale_fill_manual(values = c("zh" = "#B3742D", 
@@ -1211,6 +1113,419 @@ fig4 <- fig1+fig2
 ggsave("./figure/fig4.svg", plot = fig4, width = 12.5, height = 4)
 ggsave("./figure/fig4.png", plot = fig4, width = 12.5, height = 4)
 ```
+
+```{r 评分数据整理}
+pingfen <- df01 |>
+  dplyr::select(Child_name, Group, Syntax_production, 
+                Rating.mean, 词类, Trials, PPVTZ) |>
+  group_by(Child_name, Group, Syntax_production, 词类)|>
+  summarise(mean = mean(Rating.mean))
+```
+
+```{r 产出句法评分}
+set.seed(330)
+df01$Syntax_production <- factor(df01$Syntax_production, levels = c("be", "ba", "zh"))
+model_formulas <- list(
+  p1 = Rating.mean ~ 1 + Group * 词类 * Syntax_production + (1| Child_name) + (1 | Trials),
+  p2 = Rating.mean ~ 1 + Group * 词类 + Syntax_production + (1| Child_name) + (1 | Trials),
+  p3 = Rating.mean ~ 1 + Group + 词类 * Syntax_production + (1| Child_name) + (1 | Trials),
+  p4 = Rating.mean ~ 1 + Group + 词类 + Syntax_production + (1| Child_name) + (1 | Trials),
+  p5 = Rating.mean ~ 1 + Group * 词类 * Syntax_production + (1| Child_name),
+  p6 = Rating.mean ~ 1 + Group * 词类 + Syntax_production + (1| Child_name),
+  p7 = Rating.mean ~ 1 + Group + 词类 * Syntax_production + (1| Child_name),
+  p8 = Rating.mean ~ 1 + Group + 词类 + Syntax_production + (1| Child_name),
+  p9 = Rating.mean ~ 1 + Group * 词类 * Syntax_production + (1 | Trials),
+  p10 = Rating.mean ~ 1 + Group * 词类 + Syntax_production + (1 | Trials),
+  p11 = Rating.mean ~ 1 + Group + 词类 * Syntax_production + (1 | Trials),
+  p12 = Rating.mean ~ 1 + Group + 词类 + Syntax_production + (1 | Trials),
+  p13 = Rating.mean ~ 1 + Group * 词类 * Syntax_production,
+  p14 = Rating.mean ~ 1 + Group * 词类 + Syntax_production,
+  p15 = Rating.mean ~ 1 + Group + 词类 * Syntax_production,
+  p16 = Rating.mean ~ 1 + Group + 词类 + Syntax_production) 
+
+p_objects <- list()
+p_summaries <- list ()
+for (model_name in names(model_formulas)) {
+  formula <- model_formulas[[model_name]]
+  model <- brm(
+    formula = formula,
+    data = df01 ,
+    init = 0,
+    chains = 4,
+    warmup = 1000,
+    iter = 5000,
+    thin = 1,
+    cores = 4)
+
+  p_objects[[model_name]] <- model
+  p_summaries[[model_name]] <- summary(model)
+}
+loo_p <- list()
+for (model_name in names(p_objects)) {
+  loo_p[[model_name]] <- LOO(p_objects[[model_name]])
+}
+p.compare <- brms::LOO(
+  p_objects$p1,
+  p_objects$p2,
+  p_objects$p3,
+  p_objects$p4,
+  p_objects$p5,
+  p_objects$p6,
+  p_objects$p7,
+  p_objects$p8,
+  p_objects$p9,
+  p_objects$p10,
+  p_objects$p11,
+  p_objects$p12,
+  p_objects$p13,
+  p_objects$p14,
+  p_objects$p15,
+  p_objects$p16
+)
+bayestestR::hdi(p_objects$p3)
+
+p1.mae <- posterior_predict(p_objects$p1)
+p2.mae <- posterior_predict(p_objects$p2)
+p3.mae <- posterior_predict(p_objects$p3)
+p4.mae <- posterior_predict(p_objects$p4)
+p5.mae <- posterior_predict(p_objects$p5)
+p6.mae <- posterior_predict(p_objects$p6)
+p7.mae <- posterior_predict(p_objects$p7)
+p8.mae <- posterior_predict(p_objects$p8)
+p9.mae <- posterior_predict(p_objects$p9)
+p10.mae <- posterior_predict(p_objects$p10)
+p11.mae <- posterior_predict(p_objects$p11)
+p12.mae <- posterior_predict(p_objects$p12)
+p13.mae <- posterior_predict(p_objects$p13)
+p14.mae <- posterior_predict(p_objects$p14)
+p15.mae <- posterior_predict(p_objects$p15)
+p16.mae <- posterior_predict(p_objects$p16)
+
+p1 <- median(abs(apply(p1.mae, 2, mean) - df01[, 27]))
+p2 <- median(abs(apply(p2.mae, 2, mean) - df01[, 27]))
+p3 <- median(abs(apply(p3.mae, 2, mean) - df01[, 27]))
+p4 <- median(abs(apply(p4.mae, 2, mean) - df01[, 27]))
+p5 <- median(abs(apply(p5.mae, 2, mean) - df01[, 27]))
+p6 <- median(abs(apply(p6.mae, 2, mean) - df01[, 27]))
+p7 <- median(abs(apply(p7.mae, 2, mean) - df01[, 27]))
+p8 <- median(abs(apply(p8.mae, 2, mean) - df01[, 27]))
+p9 <- median(abs(apply(p9.mae, 2, mean) - df01[, 27]))
+p10 <- median(abs(apply(p10.mae, 2, mean) - df01[, 27]))
+p11 <- median(abs(apply(p11.mae, 2, mean) - df01[, 27]))
+p12 <- median(abs(apply(p12.mae, 2, mean) - df01[, 27]))
+p13 <- median(abs(apply(p13.mae, 2, mean) - df01[, 27]))
+p14 <- median(abs(apply(p14.mae, 2, mean) - df01[, 27]))
+p15 <- median(abs(apply(p15.mae, 2, mean) - df01[, 27]))
+p16 <- median(abs(apply(p16.mae, 2, mean) - df01[, 27]))
+
+p.result <- paste0("p", 1:16)
+for (v in p.result) {
+  print(head(get(v)))
+}
+```
+
+
+
+
+
+########################################################################
+
+```{r 诱发句法评分}
+model_formulas <- list(
+  y1 = Rating.mean ~ 1 + Group * 词类 * Syntax_prime + (1| Child_name) + (1 | Trials),
+  y2 = Rating.mean ~ 1 + Group * 词类 + Syntax_prime + (1| Child_name) + (1 | Trials),
+  y3 = Rating.mean ~ 1 + Group + 词类 * Syntax_prime + (1| Child_name) + (1 | Trials),
+  y4 = Rating.mean ~ 1 + Group + 词类 + Syntax_prime + (1| Child_name) + (1 | Trials),
+  y5 = Rating.mean ~ 1 + Group * 词类 * Syntax_prime + (1| Child_name),
+  y6 = Rating.mean ~ 1 + Group * 词类 + Syntax_prime + (1| Child_name),
+  y7 = Rating.mean ~ 1 + Group + 词类 * Syntax_prime + (1| Child_name),
+  y8 = Rating.mean ~ 1 + Group + 词类 + Syntax_prime + (1| Child_name),
+  y9 = Rating.mean ~ 1 + Group * 词类 * Syntax_prime + (1 | Trials),
+  y10 = Rating.mean ~ 1 + Group * 词类 + Syntax_prime + (1 | Trials),
+  y11 = Rating.mean ~ 1 + Group + 词类 * Syntax_prime + (1 | Trials),
+  y12 = Rating.mean ~ 1 + Group + 词类 + Syntax_prime + (1 | Trials),
+  y13 = Rating.mean ~ 1 + Group * 词类 * Syntax_prime,
+  y14 = Rating.mean ~ 1 + Group * 词类 + Syntax_prime,
+  y15 = Rating.mean ~ 1 + Group + 词类 * Syntax_prime,
+  y16 = Rating.mean ~ 1 + Group + 词类 + Syntax_prime,
+  y17 = Rating.mean ~ 1 + Group * 词类 + (1| Trials) +(1| Child_name),
+  y18 = Rating.mean ~ 1 + Group * 词类 + (1| Trials),
+  y19 = Rating.mean ~ 1 + Group * 词类+ (1| Child_name),
+  y20 = Rating.mean ~ 1 + Group * 词类,
+  y21 = Rating.mean ~ 1 + Group * Syntax_prime + (1| Trials) +(1| Child_name),
+  y22 = Rating.mean ~ 1 + Group * Syntax_prime + (1| Trials),
+  y23 = Rating.mean ~ 1 + Group * Syntax_prime + (1| Child_name),
+  y24 = Rating.mean ~ 1 + Group * Syntax_prime,
+  y25 = Rating.mean ~ 1 + Group + 词类 + (1| Trials) +(1| Child_name),
+  y26 = Rating.mean ~ 1 + Group + 词类 + (1| Trials),
+  y27 = Rating.mean ~ 1 + Group + 词类+ (1| Child_name),
+  y28 = Rating.mean ~ 1 + Group + 词类,
+  y29 = Rating.mean ~ 1 + Group + Syntax_prime + (1| Trials) +(1| Child_name),
+  y30 = Rating.mean ~ 1 + Group + Syntax_prime + (1| Trials),
+  y31 = Rating.mean ~ 1 + Group + Syntax_prime + (1| Child_name),
+  y32 = Rating.mean ~ 1 + Group + Syntax_prime,
+  y33 = Rating.mean ~ 1 + Syntax_prime * 词类 + (1| Trials) +(1| Child_name),
+  y34 = Rating.mean ~ 1 + Syntax_prime * 词类 + (1| Trials),
+  y35 = Rating.mean ~ 1 + Syntax_prime * 词类+ (1| Child_name),
+  y36 = Rating.mean ~ 1 + Syntax_prime * 词类,
+  y37 = Rating.mean ~ 1 + Syntax_prime + 词类 + (1| Trials) +(1| Child_name),
+  y38 = Rating.mean ~ 1 + Syntax_prime + 词类 + (1| Trials),
+  y39 = Rating.mean ~ 1 + Syntax_prime + 词类+ (1| Child_name),
+  y40 = Rating.mean ~ 1 + Syntax_prime + 词类,
+  y41 = Rating.mean ~ 1 + 词类 + (1| Trials) +(1| Child_name),
+  y42 = Rating.mean ~ 1 + 词类 + (1| Trials),
+  y43 = Rating.mean ~ 1 + 词类 + (1| Child_name),
+  y44 = Rating.mean ~ 1 + 词类,
+  y45 = Rating.mean ~ 1 + Group + (1| Trials) +(1| Child_name),
+  y46 = Rating.mean ~ 1 + Group + (1| Trials),
+  y47 = Rating.mean ~ 1 + Group+ (1| Child_name),
+  y48 = Rating.mean ~ 1 + Group,
+  y49 = Rating.mean ~ 1 + Syntax_prime + (1| Trials) +(1| Child_name),
+  y50 = Rating.mean ~ 1 + Syntax_prime + (1| Trials),
+  y51 = Rating.mean ~ 1 + Syntax_prime+ (1| Child_name),
+  y52 = Rating.mean ~ 1 + Syntax_prime
+  ) 
+
+y_objects <- list()
+y_summaries <- list ()
+for (model_name in names(model_formulas)) {
+  formula <- model_formulas[[model_name]]
+  model <- brm(
+    formula = formula,
+    data = df01 ,
+    init = 0,
+    chains = 4,
+    warmup = 1000,
+    iter = 5000,
+    thin = 1,
+    cores = 4)
+
+  y_objects[[model_name]] <- model
+  y_summaries[[model_name]] <- summary(model)
+}
+loo_y <- list()
+for (model_name in names(y_objects)) {
+  loo_y[[model_name]] <- LOO(y_objects[[model_name]])
+}
+y.compare <- brms::LOO(
+  y_objects$y1,
+  y_objects$y2,
+  y_objects$y3,
+  y_objects$y4,
+  y_objects$y5,
+  y_objects$y6,
+  y_objects$y7,
+  y_objects$y8,
+  y_objects$y9,
+  y_objects$y10,
+  y_objects$y11,
+  y_objects$y12,
+  y_objects$y13,
+  y_objects$y14,
+  y_objects$y15,
+  y_objects$y16,
+  y_objects$y17,
+  y_objects$y18,
+  y_objects$y19,
+  y_objects$y20,
+  y_objects$y21,
+  y_objects$y22,
+  y_objects$y23,
+  y_objects$y24,
+  y_objects$y25,
+  y_objects$y26,
+  y_objects$y27,
+  y_objects$y28,
+  y_objects$y29,
+  y_objects$y30,
+  y_objects$p31,
+  y_objects$p32,
+  y_objects$p33,
+  y_objects$p34,
+  y_objects$p35,
+  y_objects$p36,
+  y_objects$p37,
+  y_objects$p38,
+  y_objects$p39,
+  y_objects$p30,
+  y_objects$p41,
+  y_objects$p42,
+  y_objects$p43,
+  y_objects$p44,
+  y_objects$p45,
+  y_objects$p46,
+  y_objects$p47,
+  y_objects$p48,
+  y_objects$p49,
+  y_objects$p40,
+  y_objects$p51,
+  y_objects$p52
+)
+bayestestR::hdi(y_objects$y25)
+
+y1.mae <- posterior_predict(y_objects$y1)
+y2.mae <- posterior_predict(y_objects$y2)
+y3.mae <- posterior_predict(y_objects$y3)
+y4.mae <- posterior_predict(y_objects$y4)
+y5.mae <- posterior_predict(y_objects$y5)
+y6.mae <- posterior_predict(y_objects$y6)
+y7.mae <- posterior_predict(y_objects$y7)
+y8.mae <- posterior_predict(y_objects$y8)
+y9.mae <- posterior_predict(y_objects$y9)
+y10.mae <- posterior_predict(y_objects$y10)
+y11.mae <- posterior_predict(y_objects$y11)
+y12.mae <- posterior_predict(y_objects$y12)
+y13.mae <- posterior_predict(y_objects$y13)
+y14.mae <- posterior_predict(y_objects$y14)
+y15.mae <- posterior_predict(y_objects$y15)
+y16.mae <- posterior_predict(y_objects$y16)
+y17.mae <- posterior_predict(y_objects$y17)
+y18.mae <- posterior_predict(y_objects$y18)
+y19.mae <- posterior_predict(y_objects$y19)
+y20.mae <- posterior_predict(y_objects$y20)
+y21.mae <- posterior_predict(y_objects$y21)
+y22.mae <- posterior_predict(y_objects$y22)
+y23.mae <- posterior_predict(y_objects$y23)
+y24.mae <- posterior_predict(y_objects$y24)
+y25.mae <- posterior_predict(y_objects$y25)
+y26.mae <- posterior_predict(y_objects$y26)
+y27.mae <- posterior_predict(y_objects$y27)
+y28.mae <- posterior_predict(y_objects$y28)
+y29.mae <- posterior_predict(y_objects$y29)
+y30.mae <- posterior_predict(y_objects$y30)
+y31.mae <- posterior_predict(y_objects$y31)
+y32.mae <- posterior_predict(y_objects$y32)
+y33.mae <- posterior_predict(y_objects$y33)
+y34.mae <- posterior_predict(y_objects$y34)
+y35.mae <- posterior_predict(y_objects$y35)
+y36.mae <- posterior_predict(y_objects$y36)
+y37.mae <- posterior_predict(y_objects$y37)
+y38.mae <- posterior_predict(y_objects$y38)
+y39.mae <- posterior_predict(y_objects$y39)
+y40.mae <- posterior_predict(y_objects$y40)
+y41.mae <- posterior_predict(y_objects$y41)
+y42.mae <- posterior_predict(y_objects$y42)
+y43.mae <- posterior_predict(y_objects$y43)
+y44.mae <- posterior_predict(y_objects$y44)
+y45.mae <- posterior_predict(y_objects$y45)
+y46.mae <- posterior_predict(y_objects$y46)
+y47.mae <- posterior_predict(y_objects$y47)
+y48.mae <- posterior_predict(y_objects$y48)
+y49.mae <- posterior_predict(y_objects$y49)
+y50.mae <- posterior_predict(y_objects$y50)
+y51.mae <- posterior_predict(y_objects$y51)
+y52.mae <- posterior_predict(y_objects$y52)
+
+y1 <- median(abs(apply(y1.mae, 2, mean) - df01[, 27]))
+y2 <- median(abs(apply(y2.mae, 2, mean) - df01[, 27]))
+y3 <- median(abs(apply(y3.mae, 2, mean) - df01[, 27]))
+y4 <- median(abs(apply(y4.mae, 2, mean) - df01[, 27]))
+y5 <- median(abs(apply(y5.mae, 2, mean) - df01[, 27]))
+y6 <- median(abs(apply(y6.mae, 2, mean) - df01[, 27]))
+y7 <- median(abs(apply(y7.mae, 2, mean) - df01[, 27]))
+y8 <- median(abs(apply(y8.mae, 2, mean) - df01[, 27]))
+y9 <- median(abs(apply(y9.mae, 2, mean) - df01[, 27]))
+y10 <- median(abs(apply(y10.mae, 2, mean) - df01[, 27]))
+y11 <- median(abs(apply(y11.mae, 2, mean) - df01[, 27]))
+y12 <- median(abs(apply(y12.mae, 2, mean) - df01[, 27]))
+y13 <- median(abs(apply(y13.mae, 2, mean) - df01[, 27]))
+y14 <- median(abs(apply(y14.mae, 2, mean) - df01[, 27]))
+y15 <- median(abs(apply(y15.mae, 2, mean) - df01[, 27]))
+y16 <- median(abs(apply(y16.mae, 2, mean) - df01[, 27]))
+y17 <- median(abs(apply(y17.mae, 2, mean) - df01[, 27]))
+y18 <- median(abs(apply(y18.mae, 2, mean) - df01[, 27]))
+y19 <- median(abs(apply(y19.mae, 2, mean) - df01[, 27]))
+y20 <- median(abs(apply(y20.mae, 2, mean) - df01[, 27]))
+y21 <- median(abs(apply(y21.mae, 2, mean) - df01[, 27]))
+y22 <- median(abs(apply(y22.mae, 2, mean) - df01[, 27]))
+y23 <- median(abs(apply(y23.mae, 2, mean) - df01[, 27]))
+y24 <- median(abs(apply(y24.mae, 2, mean) - df01[, 27]))
+y25 <- median(abs(apply(y25.mae, 2, mean) - df01[, 27]))
+y26 <- median(abs(apply(y26.mae, 2, mean) - df01[, 27]))
+y27 <- median(abs(apply(y27.mae, 2, mean) - df01[, 27]))
+y28 <- median(abs(apply(y28.mae, 2, mean) - df01[, 27]))
+y29 <- median(abs(apply(y29.mae, 2, mean) - df01[, 27]))
+y30 <- median(abs(apply(y30.mae, 2, mean) - df01[, 27]))
+y31 <- median(abs(apply(y31.mae, 2, mean) - df01[, 27]))
+y32 <- median(abs(apply(y32.mae, 2, mean) - df01[, 27]))
+y33 <- median(abs(apply(y33.mae, 2, mean) - df01[, 27]))
+y34 <- median(abs(apply(y34.mae, 2, mean) - df01[, 27]))
+y35 <- median(abs(apply(y35.mae, 2, mean) - df01[, 27]))
+y36 <- median(abs(apply(y36.mae, 2, mean) - df01[, 27]))
+y37 <- median(abs(apply(y37.mae, 2, mean) - df01[, 27]))
+y38 <- median(abs(apply(y38.mae, 2, mean) - df01[, 27]))
+y39 <- median(abs(apply(y39.mae, 2, mean) - df01[, 27]))
+y40 <- median(abs(apply(y30.mae, 2, mean) - df01[, 27]))
+y41 <- median(abs(apply(y41.mae, 2, mean) - df01[, 27]))
+y42 <- median(abs(apply(y42.mae, 2, mean) - df01[, 27]))
+y43 <- median(abs(apply(y43.mae, 2, mean) - df01[, 27]))
+y44 <- median(abs(apply(y44.mae, 2, mean) - df01[, 27]))
+y45 <- median(abs(apply(y45.mae, 2, mean) - df01[, 27]))
+y46 <- median(abs(apply(y46.mae, 2, mean) - df01[, 27]))
+y47 <- median(abs(apply(y47.mae, 2, mean) - df01[, 27]))
+y48 <- median(abs(apply(y48.mae, 2, mean) - df01[, 27]))
+y49 <- median(abs(apply(y49.mae, 2, mean) - df01[, 27]))
+y50 <- median(abs(apply(y50.mae, 2, mean) - df01[, 27]))
+y51 <- median(abs(apply(y51.mae, 2, mean) - df01[, 27]))
+y52 <- median(abs(apply(y52.mae, 2, mean) - df01[, 27]))
+
+y.result <- paste0("y", 1:52)
+for (v in y.result) {
+  print(head(get(v)))
+}
+```
+
+
+```{r 评分fig4}
+pf_new <- df01 %>% 
+  dplyr::select(Syntax_prime, Syntax_production, Rating.mean, 词类, Group, Words_prime) |>
+  dplyr::group_by(Words_prime, 词类, Group) |>
+  dplyr::summarise(
+    pingfen = mean(Rating.mean, na.rm = TRUE), .groups = "drop")|>
+  arrange(词类, pingfen)|>
+  dplyr::mutate(Words_prime = factor(Words_prime, levels = unique(Words_prime))) |>
+  pivot_wider(names_from = Group, values_from = pingfen)
+table(pf_new$词类)
+n_quxiang <- sum(pf_new$词类 == "趋向动补")
+fig4 <- ggplot(pf_new) +
+  annotate("rect", xmin = n_quxiang + 0.5, xmax = Inf,
+           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.5) +
+  annotate("rect", xmin = -Inf, xmax = n_quxiang + 0.5,
+           ymin = -Inf, ymax = Inf, fill = "white", alpha = 0.3) +
+  geom_segment(aes(x = Words_prime, xend = Words_prime, y = ASD, yend = TDC),
+               size = 1.5, color = "grey40") +
+  geom_point(aes(x = Words_prime, y = ASD), 
+             size = 4, color = "#B3742D", fill = "#B3742D", shape = 21) +
+  geom_point(aes(x = Words_prime, y = TDC), 
+             size = 4, color = "#006654", fill = "#006654", shape = 21) +
+  annotate("point", x = 8, y = 10.2, size = 4, 
+           color = "#B3742D", fill = "#B3742D", shape = 21) +
+  annotate("text", x = 8, y = 10.3, label = "孤独症儿童", 
+           size = 3.5, hjust = 0) +
+  annotate("point", x = 7, y = 10.2, size = 4, 
+           color = "#006654", fill = "#006654", shape = 21) +
+  annotate("text", x = 7, y = 10.3, label = "典型儿童", 
+           size = 3.5, hjust = 0) +
+  annotate("rect", xmin = 8.75, xmax = 9.25, ymin = 10.14, ymax = 10.26, 
+           fill = "grey90", color = "grey60", size = 0.3) +
+  annotate("text", x = 9, y = 10.3, label = "结果动补", 
+           size = 3.5, hjust = 0) +
+  annotate("rect", xmin = 5.75, xmax = 6.25, ymin = 10.14, ymax = 10.26, 
+           fill = "white", color = "grey60", size = 0.3) +
+  annotate("text", x = 6, y = 10.3, label = "趋向动补", 
+           size = 3.5, hjust = 0) +
+  theme_test() +
+  labs(y = NULL, x = NULL) +
+  coord_flip(ylim = c(5, 11)) + 
+  theme(axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        axis.ticks.y = element_blank(), 
+        panel.grid.major = element_line(size = 0.2, color = "#e5e5e5"))
+fig4
+ggsave("./figure/fig4.svg", plot = fig4, width = 7, height = 5)
+ggsave("./figure/fig4.png", plot = fig4, width = 7, height = 5)
+```
+
 
 
 ###############################################################################################
