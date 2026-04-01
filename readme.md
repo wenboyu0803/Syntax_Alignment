@@ -1,4 +1,4 @@
-data folder：ASD: ASD sub infor
+data folder：ASD: ASD sub information
 	TD: TDC sub infor
 	Dialogeu data1: Result0910
 	Dialogeu data2: Result0915
